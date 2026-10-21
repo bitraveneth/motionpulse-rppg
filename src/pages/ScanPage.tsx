@@ -11,6 +11,7 @@ import {
 } from '../components/SessionStrip'
 import { ShareToFeed } from '../components/ShareToFeed'
 import { SignalChart, SpectrumChart } from '../components/SignalChart'
+import { RegionTrustFaceMap } from '../components/RegionTrustFaceMap'
 import { VitalsScanRow } from '../components/VitalsScanRow'
 import { SiteNav } from '../components/SiteNav'
 import { useSearchParams } from 'react-router-dom'
@@ -32,6 +33,7 @@ import { runPipeline, type PipelineResult } from '../lib/rppg/pipeline'
 import { conflictRiskLabel } from '../lib/rppg/conflict'
 import { estimateRespiratoryRate } from '../lib/rppg/respiratory'
 import { generateSyntheticSample } from '../lib/rppg/synthetic'
+import { paintSyntheticPreview } from '../lib/rppg/syntheticPreview'
 import {
   DEFAULT_CONTROLS,
   ROI_IDS,
@@ -176,6 +178,13 @@ export function ScanPage() {
 
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
 
+  const regionWeights = useMemo(() => {
+    if (!result) return null
+    return Object.fromEntries(
+      ROI_IDS.map((id) => [id, result.reliability.weights[id] ?? 0]),
+    )
+  }, [result])
+
   const scrubLandmarks = useMemo(() => {
     if (!source?.frames.length) return null
     const idx = Math.min(
@@ -197,18 +206,12 @@ export function ScanPage() {
     canvas.height = 600
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    const g = ctx.createLinearGradient(0, 0, 0, 600)
-    g.addColorStop(0, '#d5e6ef')
-    g.addColorStop(1, '#e8f0f2')
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, 480, 600)
-    ctx.fillStyle = 'rgba(14,107,106,0.12)'
-    for (const p of lm.slice(0, 120)) {
-      ctx.beginPath()
-      ctx.arc(p.x * 480, p.y * 600, 2.2, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  }, [inputMode, synthetic, scrubLandmarks])
+    const idx = Math.min(
+      synthetic.frames.length - 1,
+      Math.max(0, Math.round(scrub * (synthetic.frames.length - 1))),
+    )
+    paintSyntheticPreview(ctx, 480, 600, lm, idx, synthetic.roiRgb)
+  }, [inputMode, synthetic, scrubLandmarks, scrub])
 
   useEffect(() => {
     if (inputMode !== 'webcam') {
@@ -1078,24 +1081,29 @@ export function ScanPage() {
         ) : null}
 
         <div className="scan-stage">
-          <MonitorStage
-            videoRef={videoRef}
-            canvasRef={canvasRef}
-            landmarks={lastLandmarks}
-            inputMode={inputMode}
-            busy={busy}
-            hasVideo={hasVideo}
-            scrub={scrub}
-            onScrub={handleScrub}
-            durationSec={durationSec}
-            onUploadClick={openUploadPicker}
-            onWebcam={() => void handleInputMode('webcam')}
-            onSample={() => void handleInputMode('synthetic')}
-            onLoadDemoSet={() => void loadDemoSet()}
-            demoLoading={demoLoading}
-            status={status}
-            showCtaBar
-          />
+          <div className="scan-monitor-row">
+            <MonitorStage
+              videoRef={videoRef}
+              canvasRef={canvasRef}
+              landmarks={lastLandmarks}
+              inputMode={inputMode}
+              busy={busy}
+              hasVideo={hasVideo}
+              scrub={scrub}
+              onScrub={handleScrub}
+              durationSec={durationSec}
+              onUploadClick={openUploadPicker}
+              onWebcam={() => void handleInputMode('webcam')}
+              onSample={() => void handleInputMode('synthetic')}
+              onLoadDemoSet={() => void loadDemoSet()}
+              demoLoading={demoLoading}
+              status={status}
+              showCtaBar
+            />
+            {regionWeights ? (
+              <RegionTrustFaceMap weights={regionWeights} />
+            ) : null}
+          </div>
 
           <VitalsScanRow
             result={result}

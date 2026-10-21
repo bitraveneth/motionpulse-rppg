@@ -2,10 +2,8 @@ import { conflictRiskLabel } from '../lib/rppg/conflict'
 import type { PipelineResult } from '../lib/rppg/pipeline'
 import type { RespiratoryEstimate } from '../lib/rppg/respiratory'
 import { reliabilityFromConflict } from '../lib/feed/reliability'
-import { ROI_IDS } from '../lib/rppg/types'
 import { ReliabilityBadge } from './ReliabilityBadge'
 import { SignalChart } from './SignalChart'
-import { TrustDots } from './TrustDots'
 
 type Props = {
   result: PipelineResult | null
@@ -32,12 +30,6 @@ export function VitalsScanRow({
     ? reliabilityFromConflict(result.conflict.combined)
     : null
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
-  const weights = result
-    ? Object.fromEntries(
-        ROI_IDS.map((id) => [id, result.reliability.weights[id] ?? 0]),
-      )
-    : null
-
   return (
     <section
       className={`vitals-scan ${liveEstimating ? 'is-live' : ''}`}
@@ -116,9 +108,6 @@ export function VitalsScanRow({
               ]}
             />
           </div>
-          {weights ? (
-            <TrustDots weights={weights} variant="pct" className="vitals-trust" />
-          ) : null}
         </div>
       ) : null}
     </section>
