@@ -96,7 +96,7 @@ export function VitalsPanel({
               series={[
                 {
                   values: wave,
-                  color: '#C45C3E',
+                  color: '#E07A5F',
                   label: 'Pulse waveform',
                 },
               ]}

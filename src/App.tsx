@@ -88,7 +88,6 @@ export default function App() {
   const [feedTick, setFeedTick] = useState(0)
   const [showStory, setShowStory] = useState(true)
   const [thumbnailData, setThumbnailData] = useState<string | null>(null)
-  const [view, setView] = useState<'demo' | 'lab'>('demo')
   const [scrub, setScrub] = useState(1)
   const [durationSec, setDurationSec] = useState(12)
   const [hasVideo, setHasVideo] = useState(false)
@@ -1036,58 +1035,47 @@ export default function App() {
     <div className="app-shell">
       <div className="atmosphere" aria-hidden />
 
-      {labEnabled && (
-        <nav className="app-nav" aria-label="Primary">
+      <header className="site-masthead">
+        <p className="masthead-eyebrow">Camera-based pulse</p>
+        <h1 className="brand">
+          Motion<span>Pulse</span>
+        </h1>
+        <p className="masthead-headline">
+          Heart rate from a face video — live in your browser.
+        </p>
+        <p className="masthead-support">
+          Upload a short clip, open your webcam, or try the built-in sample.
+          Vitals refine as frames arrive.
+        </p>
+        <div className="masthead-cta" role="group" aria-label="Start monitoring">
           <button
             type="button"
-            className={`app-nav-link ${view === 'demo' ? 'is-active' : ''}`}
-            onClick={() => setView('demo')}
+            className="cta cta-primary"
+            onClick={openUploadPicker}
+            disabled={busy || demoLoading}
           >
-            Demo
+            Upload clip
           </button>
           <button
             type="button"
-            className={`app-nav-link ${view === 'lab' ? 'is-active' : ''}`}
-            onClick={() => setView('lab')}
+            className="cta cta-secondary"
+            onClick={() => void handleInputMode('webcam')}
+            disabled={busy || demoLoading}
           >
-            Local lab
+            Webcam
           </button>
-        </nav>
-      )}
+          <button
+            type="button"
+            className="cta cta-secondary"
+            onClick={() => void handleInputMode('synthetic')}
+            disabled={busy || demoLoading}
+          >
+            Try sample
+          </button>
+        </div>
+      </header>
 
-      {view === 'lab' && labEnabled ? (
-        <>
-          <header className="hero hero-compact">
-            <h1 className="brand">
-              Motion<span>Pulse</span>
-            </h1>
-            <p className="headline">Local lab</p>
-            <p className="tagline">
-              Batch datasets on this machine. Metrics can go online — videos
-              stay local.
-            </p>
-          </header>
-          <LocalLab onPublished={() => setFeedTick((t) => t + 1)} />
-          <RecentRuns refreshToken={feedTick} />
-          <footer className="site-foot">
-            <p>
-              Local lab — educational demo, not a medical device. Never publish
-              raw face video.
-            </p>
-          </footer>
-        </>
-      ) : (
-        <>
-          <header className="hero hero-monitor">
-            <h1 className="brand">
-              Motion<span>Pulse</span>
-            </h1>
-            <p className="tagline">
-              Face monitoring — live heart rate from video. Upload clips, load
-              a demo set, or try the sample.
-            </p>
-          </header>
-
+      <main id="monitor" className="monitor-main" aria-label="Monitoring stage">
           <input
             ref={fileInputRef}
             type="file"
@@ -1161,6 +1149,38 @@ export default function App() {
             onClear={clearSession}
             max={SESSION_MAX}
           />
+
+      </main>
+
+      <div className="lower-fold">
+        <nav className="lower-nav" aria-label="More on this page">
+          <a href="#recent-runs">Recent runs</a>
+          <a href="#how-to-read">How to read</a>
+          <a href="#demo-tools">Demo tools</a>
+          {labEnabled ? <a href="#local-lab">Local lab</a> : null}
+        </nav>
+
+        <div id="recent-runs" className="lower-section">
+          <RecentRuns refreshToken={feedTick} />
+        </div>
+
+        <div id="how-to-read" className="lower-section">
+          {showStory && <EducationSection variant="guide" />}
+        </div>
+
+        <section
+          id="demo-tools"
+          className="lower-section demo-tools-section"
+          aria-labelledby="demo-tools-title"
+        >
+          <header className="lower-section-head">
+            <p className="lower-kicker">Demo</p>
+            <h2 id="demo-tools-title">Demo tools</h2>
+            <p>
+              Share metric summaries, tune the pipeline, or inspect motion and
+              spectrum — still all in-browser.
+            </p>
+          </header>
 
           <EducationSection variant="tips" />
 
@@ -1384,26 +1404,27 @@ export default function App() {
             </div>
           </details>
 
-          {uploadName && (
-            <p className="help-line">
-              Last clip: {uploadName}. Face video stays in your browser — only
-              optional metric summaries can go to the feed.
-            </p>
-          )}
+        </section>
 
-          <RecentRuns refreshToken={feedTick} />
+        {labEnabled ? (
+          <section id="local-lab" className="lower-section local-lab-wrap">
+            <LocalLab onPublished={() => setFeedTick((t) => t + 1)} />
+          </section>
+        ) : null}
+      </div>
 
-          {showStory && <EducationSection variant="guide" />}
-
-          <footer className="site-foot">
-            <p>
-              Browser demo for learning — not a medical device. Shared feed
-              stores metric summaries and optional tiny thumbs only — never raw
-              face video. Blood pressure is not estimated from rPPG alone.
-            </p>
-          </footer>
-        </>
-      )}
+      <footer className="site-foot">
+        {uploadName ? (
+          <p className="help-line">
+            Last clip: {uploadName}. Face video stays in your browser — only
+            optional metric summaries can go to the feed.
+          </p>
+        ) : null}
+        <p>
+          Educational demo — not a medical device. Blood pressure is not
+          estimated from rPPG alone.
+        </p>
+      </footer>
     </div>
   )
 }

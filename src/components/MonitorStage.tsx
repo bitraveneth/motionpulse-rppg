@@ -121,7 +121,7 @@ export function MonitorStage({
     ctx.stroke()
 
     ctx.fillStyle = 'rgba(14, 107, 106, 0.88)'
-    ctx.font = '600 12px Figtree, sans-serif'
+    ctx.font = '600 12px "Instrument Sans", sans-serif'
     const labelY = Math.max(oy + 4, y - 22)
     ctx.fillRect(x, labelY, 78, 20)
     ctx.fillStyle = '#fff'
