@@ -71,7 +71,19 @@ alter table public.runs add column if not exists sparkline text null;
 
 Optionally create a public-read Storage bucket named `thumbs` for ~128–192px JPEG/WebP (~40–80KB). Prefer `thumbnail_url` when using Storage; otherwise `thumbnail_data` (text) is fine under the schema size checks. Re-apply the insert RLS policy from `schema.sql` so the new column length checks apply.
 
-## Local batch (UBFC / PURE / …)
+## Local lab (in-app + CLI)
+
+The **Local lab** nav item appears when running `npm run dev`, or when `VITE_ENABLE_LOCAL_LAB=true`. It is **gated** so casual public deploys do not nudge visitors toward multi‑GB dataset downloads.
+
+In Local lab you can:
+
+1. Read a short privacy note (datasets stay on this machine).
+2. Open UBFC / PURE / MMPD download links.
+3. Enter a dataset folder path and copy exact `npm run batch` / `npm run publish-results` commands.
+4. Reload `out/batch-results.json` (Vite dev serves it at `/api/local-lab/batch-results`) or load the JSON file manually.
+5. **Publish summaries online** — metrics (+ optional thumb/sparkline fields) via the same feed API. Without Supabase keys, rows go to the localStorage demo feed and the UI explains how to go live. **Never uploads video.**
+
+### Local batch CLI (UBFC / PURE / …)
 
 Process a dataset folder on your Mac. Metrics only — **never commit datasets**.
 
@@ -100,7 +112,7 @@ Optional: convert awkward codecs with ffmpeg before batching (`ffmpeg -i in.avi 
 npm run publish-results
 ```
 
-Posts rows from `out/batch-results.json` to Supabase when keys are set; otherwise prints setup instructions. **Never uploads video.**
+Posts rows from `out/batch-results.json` to Supabase when keys are set; otherwise prints setup instructions. The in-app **Publish summaries online** button uses the same metric-only payload (and falls back to the mock feed without keys). **Never uploads video.**
 
 ## Privacy
 
@@ -120,6 +132,7 @@ Posts rows from `out/batch-results.json` to Supabase when keys are set; otherwis
 | Cleaned pulse estimate | Soft cleanup when risk is high; pulse is never fully wiped |
 | Which face areas to trust | Stable skin regions get more weight |
 | Recent runs | Public/local gallery of shared metric cards |
+| Local lab | Dev-gated batch helper: dataset links, CLI commands, results table, publish |
 
 ## Dataset links (local use only)
 

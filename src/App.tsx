@@ -3,11 +3,13 @@ import { AnalysisProgress, type AnalysisStage } from './components/AnalysisProgr
 import { ControlsPanel, type InputMode } from './components/ControlsPanel'
 import { EducationSection } from './components/EducationSection'
 import { FaceOverlay } from './components/FaceOverlay'
+import { LocalLab } from './components/LocalLab'
 import { MetricPill } from './components/MetricPill'
 import { RecentRuns } from './components/RecentRuns'
 import { ResultStory } from './components/ResultStory'
 import { ShareToFeed } from './components/ShareToFeed'
 import { SignalChart, SpectrumChart } from './components/SignalChart'
+import { isLocalLabEnabled } from './lib/lab/enabled'
 import {
   detectVideoFrame,
   getFaceLandmarker,
@@ -69,6 +71,8 @@ export default function App() {
   const [feedTick, setFeedTick] = useState(0)
   const [showStory, setShowStory] = useState(true)
   const [thumbnailData, setThumbnailData] = useState<string | null>(null)
+  const [view, setView] = useState<'demo' | 'lab'>('demo')
+  const labEnabled = isLocalLabEnabled()
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -444,6 +448,48 @@ export default function App() {
     <div className="app-shell">
       <div className="atmosphere" aria-hidden />
 
+      {labEnabled && (
+        <nav className="app-nav" aria-label="Primary">
+          <button
+            type="button"
+            className={`app-nav-link ${view === 'demo' ? 'is-active' : ''}`}
+            onClick={() => setView('demo')}
+          >
+            Demo
+          </button>
+          <button
+            type="button"
+            className={`app-nav-link ${view === 'lab' ? 'is-active' : ''}`}
+            onClick={() => setView('lab')}
+          >
+            Local lab
+          </button>
+        </nav>
+      )}
+
+      {view === 'lab' && labEnabled ? (
+        <>
+          <header className="hero hero-compact">
+            <h1 className="brand">
+              Motion<span>Pulse</span>
+            </h1>
+            <p className="headline">Local lab</p>
+            <p className="tagline">
+              Batch datasets on this machine. Metrics can go online — videos
+              stay local.
+            </p>
+          </header>
+          <LocalLab onPublished={() => setFeedTick((t) => t + 1)} />
+          <RecentRuns refreshToken={feedTick} />
+          <footer className="site-foot">
+            <p>
+              Local lab — educational demo, not a medical device. Never publish
+              raw face video.
+            </p>
+          </footer>
+        </>
+      ) : (
+        <>
       <header className="hero">
         <svg
           className="hero-wave"
@@ -922,6 +968,8 @@ export default function App() {
 
       <video ref={videoRef} className="hidden" playsInline muted />
       <canvas ref={canvasRef} className="hidden" />
+        </>
+      )}
     </div>
   )
 }
