@@ -1104,6 +1104,7 @@ export function ScanPage() {
                   demoLoading={demoLoading}
                   status={status}
                   showCtaBar
+                  ctaPlacement="below"
                   hideFooterStatus
                 />
               </div>
