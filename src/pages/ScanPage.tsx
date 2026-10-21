@@ -11,7 +11,8 @@ import {
 } from '../components/SessionStrip'
 import { ShareToFeed } from '../components/ShareToFeed'
 import { SignalChart, SpectrumChart } from '../components/SignalChart'
-import { RegionTrustFaceMap } from '../components/RegionTrustFaceMap'
+import { RegionTrustLines } from '../components/RegionTrustLines'
+import { ScanVitalCards } from '../components/ScanVitalCards'
 import { VitalsScanRow } from '../components/VitalsScanRow'
 import { SiteNav } from '../components/SiteNav'
 import { useSearchParams } from 'react-router-dom'
@@ -1081,35 +1082,49 @@ export function ScanPage() {
         ) : null}
 
         <div className="scan-stage">
-          <div className="scan-monitor-row">
-            <MonitorStage
-              videoRef={videoRef}
-              canvasRef={canvasRef}
-              landmarks={lastLandmarks}
-              inputMode={inputMode}
-              busy={busy}
-              hasVideo={hasVideo}
-              scrub={scrub}
-              onScrub={handleScrub}
-              durationSec={durationSec}
-              onUploadClick={openUploadPicker}
-              onWebcam={() => void handleInputMode('webcam')}
-              onSample={() => void handleInputMode('synthetic')}
-              onLoadDemoSet={() => void loadDemoSet()}
-              demoLoading={demoLoading}
-              status={status}
-              showCtaBar
+          {!result ? (
+            <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
+          ) : null}
+
+          <div className="scan-session-top">
+            <div className="scan-monitor-card product-frame">
+              <MonitorStage
+                videoRef={videoRef}
+                canvasRef={canvasRef}
+                landmarks={lastLandmarks}
+                inputMode={inputMode}
+                busy={busy}
+                hasVideo={hasVideo}
+                scrub={scrub}
+                onScrub={handleScrub}
+                durationSec={durationSec}
+                onUploadClick={openUploadPicker}
+                onWebcam={() => void handleInputMode('webcam')}
+                onSample={() => void handleInputMode('synthetic')}
+                onLoadDemoSet={() => void loadDemoSet()}
+                demoLoading={demoLoading}
+                status={status}
+                showCtaBar
+              />
+            </div>
+
+            <ScanVitalCards
+              result={result}
+              respiratory={respiratory}
+              liveEstimating={
+                liveEstimating ||
+                (busy && stage === 'estimating_pulse' && Boolean(result))
+              }
             />
-            {regionWeights ? (
-              <RegionTrustFaceMap weights={regionWeights} />
-            ) : null}
           </div>
+
+          {regionWeights ? (
+            <RegionTrustLines weights={regionWeights} />
+          ) : null}
 
           <VitalsScanRow
             result={result}
-            respiratory={respiratory}
             scrub={scrub}
-            emptyHint={vitalsEmptyHint}
             liveEstimating={
               liveEstimating ||
               (busy && stage === 'estimating_pulse' && Boolean(result))
