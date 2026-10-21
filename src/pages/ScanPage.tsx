@@ -1087,34 +1087,25 @@ export function ScanPage() {
           ) : null}
 
           <div className="scan-session-frame product-frame">
-            <div className="scan-session-media-row">
-              <div className="scan-session-monitor-wrap">
-                <MonitorStage
-                  videoRef={videoRef}
-                  canvasRef={canvasRef}
-                  landmarks={lastLandmarks}
-                  inputMode={inputMode}
-                  busy={busy}
-                  hasVideo={hasVideo}
-                  scrub={scrub}
-                  onScrub={handleScrub}
-                  durationSec={durationSec}
-                  onUploadClick={openUploadPicker}
-                  onWebcam={() => void handleInputMode('webcam')}
-                  onSample={() => void handleInputMode('synthetic')}
-                  onLoadDemoSet={() => void loadDemoSet()}
-                  demoLoading={demoLoading}
-                  status={status}
-                  showCtaBar
-                />
-              </div>
-
-              {regionWeights ? (
-                <RegionTrustLines
-                  weights={regionWeights}
-                  className="scan-session-aside"
-                />
-              ) : null}
+            <div className="scan-session-monitor-wrap">
+              <MonitorStage
+                videoRef={videoRef}
+                canvasRef={canvasRef}
+                landmarks={lastLandmarks}
+                inputMode={inputMode}
+                busy={busy}
+                hasVideo={hasVideo}
+                scrub={scrub}
+                onScrub={handleScrub}
+                durationSec={durationSec}
+                onUploadClick={openUploadPicker}
+                onWebcam={() => void handleInputMode('webcam')}
+                onSample={() => void handleInputMode('synthetic')}
+                onLoadDemoSet={() => void loadDemoSet()}
+                demoLoading={demoLoading}
+                status={status}
+                showCtaBar
+              />
             </div>
 
             <ScanVitalCards
@@ -1125,6 +1116,10 @@ export function ScanPage() {
                 (busy && stage === 'estimating_pulse' && Boolean(result))
               }
             />
+
+            {regionWeights ? (
+              <RegionTrustLines weights={regionWeights} />
+            ) : null}
           </div>
 
           <VitalsScanRow
