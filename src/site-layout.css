@@ -902,12 +902,15 @@
     gap: 1.25rem;
   }
 
-  .scan-monitor-card {
+  .scan-session-frame {
     min-width: 0;
     padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
 
-  .scan-monitor-card .monitor-stage {
+  .scan-session-frame .monitor-stage {
     min-width: 0;
   }
 
@@ -945,12 +948,13 @@
     }
   }
 
-  .scan-region-trust {
-    margin-top: 0;
-    padding: 1rem 1.1rem;
-    border-radius: 0.85rem;
-    background: var(--site-surface);
-    border: 1px solid var(--site-line);
+  .scan-session-frame .scan-region-trust {
+    margin-top: 0.15rem;
+    padding: 0.85rem 0 0.15rem;
+    border: none;
+    border-top: 1px solid var(--site-line);
+    border-radius: 0;
+    background: transparent;
     min-width: 0;
   }
 

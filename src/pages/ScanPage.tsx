@@ -1086,7 +1086,7 @@ export function ScanPage() {
             <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
           ) : null}
 
-          <div className="scan-monitor-card product-frame">
+          <div className="scan-session-frame product-frame">
             <MonitorStage
               videoRef={videoRef}
               canvasRef={canvasRef}
@@ -1105,20 +1105,20 @@ export function ScanPage() {
               status={status}
               showCtaBar
             />
+
+            <ScanVitalCards
+              result={result}
+              respiratory={respiratory}
+              liveEstimating={
+                liveEstimating ||
+                (busy && stage === 'estimating_pulse' && Boolean(result))
+              }
+            />
+
+            {regionWeights ? (
+              <RegionTrustLines weights={regionWeights} />
+            ) : null}
           </div>
-
-          <ScanVitalCards
-            result={result}
-            respiratory={respiratory}
-            liveEstimating={
-              liveEstimating ||
-              (busy && stage === 'estimating_pulse' && Boolean(result))
-            }
-          />
-
-          {regionWeights ? (
-            <RegionTrustLines weights={regionWeights} />
-          ) : null}
 
           <VitalsScanRow
             result={result}
