@@ -78,7 +78,9 @@ export function ScanPage() {
   const [searchParams] = useSearchParams()
   const [controls, setControls] = useState<DemoControls>(DEFAULT_CONTROLS)
   const [inputMode, setInputMode] = useState<InputMode>('synthetic')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState(
+    'Sample ready — face preview below. Scrub the timeline, or upload several clips.',
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState<LiveBuffer | null>(null)
@@ -497,7 +499,7 @@ export function ScanPage() {
       })
       ensureSampleInSession()
       setStatus(
-        '',
+        'Sample ready — scrub the timeline, or upload several clips and browse with the session slider.',
       )
       return
     }
@@ -1084,7 +1086,7 @@ export function ScanPage() {
             <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
           ) : null}
 
-          <div className="scan-session-frame">
+          <div className="scan-session-frame product-frame">
             <div className="scan-session-media-row">
               <div className="scan-session-monitor-wrap">
                 <MonitorStage
@@ -1104,8 +1106,6 @@ export function ScanPage() {
                   demoLoading={demoLoading}
                   status={status}
                   showCtaBar
-                  ctaPlacement="below"
-                  hideFooterStatus
                 />
               </div>
 
