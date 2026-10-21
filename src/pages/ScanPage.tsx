@@ -1086,7 +1086,7 @@ export function ScanPage() {
             <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
           ) : null}
 
-          <div className="scan-session-frame product-frame">
+          <div className="scan-session-frame">
             <div className="scan-session-media-row">
               <div className="scan-session-monitor-wrap">
                 <MonitorStage
