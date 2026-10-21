@@ -35,6 +35,8 @@ type Props = {
   onSelect: (id: string) => void
   onClear: () => void
   max?: number
+  /** Tighter layout on /scan to match vital cards. */
+  variant?: 'default' | 'scan'
 }
 
 const MAX_DEFAULT = 10
@@ -46,9 +48,27 @@ export function SessionStrip({
   onSelect,
   onClear,
   max = MAX_DEFAULT,
+  variant = 'default',
 }: Props) {
   const list = runs.slice(0, max)
+  const isScan = variant === 'scan'
+
   if (list.length === 0) {
+    if (isScan) {
+      return (
+        <section className="scan-session-strip session-empty" aria-label="Session">
+          <div className="scan-session-strip-toolbar">
+            <div className="scan-session-strip-title-row">
+              <span className="scan-session-strip-title">Session</span>
+              <span className="scan-session-strip-count">0 of {max}</span>
+            </div>
+          </div>
+          <p className="scan-session-strip-hint">
+            Flip clips with the slider. Metrics and thumbs stay on this machine.
+          </p>
+        </section>
+      )
+    }
     return (
       <section className="session-strip session-empty" aria-label="Session">
         <header className="panel-head">
@@ -62,8 +82,70 @@ export function SessionStrip({
     )
   }
 
-  const showTable = list.length >= 2
+  const showTable = !isScan && list.length >= 2
   const doneCount = list.filter((r) => r.status === 'done').length
+
+  if (isScan) {
+    return (
+      <section className="scan-session-strip" aria-label="Session runs">
+        <div className="scan-session-strip-toolbar">
+          <div className="scan-session-strip-title-row">
+            <span className="scan-session-strip-title">Session</span>
+            <span className="scan-session-strip-count tabular-nums">
+              {list.length} of {max}
+            </span>
+          </div>
+          <button type="button" className="btn-text" onClick={onClear}>
+            Clear session
+          </button>
+        </div>
+        <p className="scan-session-strip-hint">
+          Flip clips with the slider. Metrics and thumbs stay on this machine.
+        </p>
+        <ul className="scan-session-clips" role="list">
+          {list.map((run) => (
+            <li key={run.id}>
+              <button
+                type="button"
+                className={`vitals-scan-card scan-session-clip-card ${activeId === run.id ? 'is-active' : ''}`}
+                onClick={() => onSelect(run.id)}
+              >
+                <span className="vitals-label">{clipDisplayName(run)}</span>
+                {run.status === 'done' && run.bpm != null ? (
+                  <>
+                    <span className="vitals-scan-value tabular-nums">
+                      {run.bpm.toFixed(0)}
+                    </span>
+                    <span className="vitals-unit">BPM</span>
+                    <span className="vitals-note">
+                      {run.riskScore != null
+                        ? `Risk ${run.riskScore.toFixed(2)}${
+                            run.respiratoryBpm != null
+                              ? ` · ~${run.respiratoryBpm.toFixed(0)} /min`
+                              : ''
+                          }`
+                        : '—'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="vitals-scan-value vitals-scan-value-sm">
+                      {statusLabel(run.status)}
+                    </span>
+                    <span className="vitals-note">
+                      {run.status === 'error'
+                        ? (run.errorMessage ?? 'Failed')
+                        : 'Waiting in queue…'}
+                    </span>
+                  </>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
 
   return (
     <section className="session-strip" aria-label="Session runs">
@@ -184,6 +266,11 @@ export function SessionStrip({
       )}
     </section>
   )
+}
+
+function clipDisplayName(run: SessionRun): string {
+  if (run.source === 'sample') return 'Sample'
+  return run.name
 }
 
 function statusLabel(status: SessionClipStatus) {

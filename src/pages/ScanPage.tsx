@@ -1120,6 +1120,22 @@ export function ScanPage() {
             {regionWeights ? (
               <RegionTrustLines weights={regionWeights} />
             ) : null}
+
+            <div className="scan-session-strip-wrap">
+              <SessionBrowser
+                clips={sessionRuns}
+                activeId={activeSessionId}
+                onSelect={(id) => void selectSessionClip(id, { force: true })}
+              />
+              <SessionStrip
+                runs={sessionRuns}
+                activeId={activeSessionId}
+                onSelect={(id) => void selectSessionClip(id, { force: true })}
+                onClear={clearSession}
+                max={SESSION_MAX}
+                variant="scan"
+              />
+            </div>
           </div>
 
           <VitalsScanRow
@@ -1129,21 +1145,6 @@ export function ScanPage() {
               liveEstimating ||
               (busy && stage === 'estimating_pulse' && Boolean(result))
             }
-          />
-        </div>
-
-        <div className="session-block">
-          <SessionBrowser
-            clips={sessionRuns}
-            activeId={activeSessionId}
-            onSelect={(id) => void selectSessionClip(id, { force: true })}
-          />
-          <SessionStrip
-            runs={sessionRuns}
-            activeId={activeSessionId}
-            onSelect={(id) => void selectSessionClip(id, { force: true })}
-            onClear={clearSession}
-            max={SESSION_MAX}
           />
         </div>
 
