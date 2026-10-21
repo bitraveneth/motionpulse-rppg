@@ -43,9 +43,559 @@
   .app-shell {
     position: relative;
     isolation: isolate;
-    max-width: 1080px;
+    max-width: 1180px;
     margin: 0 auto;
     padding: 1.25rem 1.15rem 3.5rem;
+  }
+
+  .hero-monitor {
+    margin-bottom: 1rem;
+  }
+
+  .hero-monitor .headline {
+    max-width: 28rem;
+  }
+
+  .hero-monitor .tagline {
+    max-width: 36rem;
+  }
+
+  .monitor-layout {
+    display: grid;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @media (min-width: 900px) {
+    .monitor-layout {
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+      align-items: start;
+      gap: 1.15rem;
+    }
+  }
+
+  .monitor-stage {
+    min-width: 0;
+  }
+
+  .monitor-frame {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    max-height: min(58vh, 520px);
+    border-radius: 1rem;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse 80% 60% at 30% 20%, rgba(46, 196, 182, 0.18), transparent 55%),
+      linear-gradient(165deg, #1a3344 0%, #0c2233 55%, #0a3d3c 100%);
+    box-shadow:
+      0 18px 40px -24px rgba(12, 34, 51, 0.55),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  .monitor-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #0c2233;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .monitor-video.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .monitor-placeholder {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    text-align: center;
+    color: rgba(232, 242, 246, 0.72);
+    font-size: 0.95rem;
+    line-height: 1.45;
+    pointer-events: none;
+  }
+
+  .monitor-placeholder p {
+    margin: 0.75rem 0 0;
+    max-width: 16rem;
+  }
+
+  .monitor-placeholder-pulse {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 50%;
+    border: 2px solid rgba(46, 196, 182, 0.65);
+    animation: bpm-ring 1.8s ease-in-out infinite;
+  }
+
+  .monitor-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .monitor-cta-bar {
+    position: absolute;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    z-index: 2;
+  }
+
+  .monitor-cta-bar .cta {
+    backdrop-filter: blur(8px);
+  }
+
+  .monitor-cta-bar .cta-secondary {
+    background: color-mix(in oklab, white 82%, transparent);
+  }
+
+  .monitor-quality {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .monitor-quality-track {
+    position: relative;
+    flex: 1;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      #c45c3e 0%,
+      #d4a017 42%,
+      #2ec4b6 100%
+    );
+  }
+
+  .monitor-quality-needle {
+    position: absolute;
+    top: -3px;
+    width: 3px;
+    height: calc(100% + 6px);
+    margin-left: -1.5px;
+    border-radius: 2px;
+    background: var(--color-ink);
+    box-shadow: 0 0 0 2px white;
+    transition: left 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .monitor-timeline {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+  }
+
+  .monitor-slider-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .monitor-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 0.85rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-sea) 18%, white);
+    border: 1px solid color-mix(in oklab, var(--color-sea) 28%, transparent);
+    cursor: pointer;
+  }
+
+  .monitor-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 50%;
+    background: var(--color-sea);
+    border: 3px solid white;
+    box-shadow: 0 4px 12px -4px rgba(14, 107, 106, 0.7);
+    cursor: grab;
+  }
+
+  .monitor-slider::-moz-range-thumb {
+    width: 1.45rem;
+    height: 1.45rem;
+    border-radius: 50%;
+    background: var(--color-sea);
+    border: 3px solid white;
+    box-shadow: 0 4px 12px -4px rgba(14, 107, 106, 0.7);
+    cursor: grab;
+  }
+
+  .monitor-slider:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .monitor-time {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-ink-soft);
+    min-width: 6.5rem;
+    text-align: right;
+  }
+
+  .monitor-status {
+    margin: 0.55rem 0 0;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    color: var(--color-ink-soft);
+  }
+
+  .queue-banner {
+    margin: 0 0 0.75rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 0.55rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-sea-deep);
+    background: color-mix(in oklab, var(--color-mint-soft) 45%, white);
+    border: 1px solid color-mix(in oklab, var(--color-mint) 40%, transparent);
+    animation: fade-in 0.3s ease both;
+  }
+
+  /* —— Vitals panel —— */
+  .vitals-panel {
+    min-width: 0;
+    padding: 1rem 1.05rem 1.15rem;
+    border-radius: 1rem;
+    background:
+      linear-gradient(
+        155deg,
+        color-mix(in oklab, white 90%, transparent),
+        color-mix(in oklab, var(--color-mint-soft) 28%, white)
+      );
+    border: 1px solid color-mix(in oklab, var(--color-sea) 16%, transparent);
+    animation: story-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .vitals-panel header h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .vitals-panel header p,
+  .vitals-empty > header p {
+    margin: 0.3rem 0 0;
+    font-size: 0.85rem;
+    color: var(--color-ink-soft);
+  }
+
+  .vitals-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .vitals-chart-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .vitals-chart {
+    min-height: 9rem;
+  }
+
+  .vitals-spark {
+    margin-top: 0.45rem;
+  }
+
+  .vitals-trust {
+    margin-top: 0.45rem;
+  }
+
+  .vitals-readout header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .risk-chip {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.35rem;
+  }
+
+  .vitals-metrics {
+    display: grid;
+    gap: 0.65rem;
+    margin-top: 0.85rem;
+  }
+
+  .vital-metric {
+    position: relative;
+    padding: 0.7rem 0.8rem;
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, white 78%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-ink) 7%, transparent);
+  }
+
+  .vital-metric-primary {
+    background: color-mix(in oklab, var(--color-mint-soft) 35%, white);
+    border-color: color-mix(in oklab, var(--color-mint) 35%, transparent);
+  }
+
+  .vitals-label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .vitals-value {
+    display: inline-block;
+    margin-top: 0.15rem;
+    font-family: var(--font-display);
+    font-size: 2.35rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+  }
+
+  .vitals-value-sm {
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  .vitals-unit {
+    margin-left: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-ink-soft);
+  }
+
+  .vitals-note {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--color-ink-soft);
+  }
+
+  .vitals-edu {
+    margin: 0.85rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--color-ink-soft);
+  }
+
+  .vitals-edu strong {
+    color: var(--color-sea-deep);
+  }
+
+  .vitals-placeholder {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.85rem;
+  }
+
+  .vitals-placeholder > div {
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.65rem;
+    background: color-mix(in oklab, white 70%, transparent);
+  }
+
+  /* —— Session strip —— */
+  .session-strip {
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.05rem 1.15rem;
+    border-radius: 0.95rem;
+    background: color-mix(in oklab, white 72%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
+    animation: rise 0.55s ease both;
+  }
+
+  .session-empty {
+    padding-bottom: 1rem;
+  }
+
+  .session-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .session-head h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .session-head p {
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+    color: var(--color-ink-soft);
+  }
+
+  .session-clear {
+    padding: 0.45rem 0.75rem;
+    font-size: 0.82rem;
+  }
+
+  .session-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+    gap: 0.65rem;
+    margin: 0.85rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .session-card {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.55rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.55rem;
+    border-radius: 0.65rem;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 10%, transparent);
+    background: color-mix(in oklab, white 85%, transparent);
+    cursor: pointer;
+    transition:
+      border-color 0.2s ease,
+      transform 0.15s ease;
+  }
+
+  .session-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-sea);
+  }
+
+  .session-card.is-active {
+    border-color: var(--color-mint);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-mint) 35%, transparent);
+  }
+
+  .session-thumb {
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 0.45rem;
+    object-fit: cover;
+    background: linear-gradient(160deg, #d9e8f0, #eef4f7);
+  }
+
+  .session-thumb-ph {
+    background: linear-gradient(
+      145deg,
+      color-mix(in oklab, var(--color-mint-soft) 55%, white),
+      #eef4f7
+    );
+  }
+
+  .session-name {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .session-bpm {
+    display: block;
+    margin-top: 0.15rem;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: var(--color-sea-deep);
+  }
+
+  .session-meta {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.68rem;
+    color: var(--color-ink-soft);
+  }
+
+  .session-table-wrap {
+    margin-top: 0.9rem;
+    overflow-x: auto;
+    border-radius: 0.55rem;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
+  }
+
+  .session-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .session-table th,
+  .session-table td {
+    padding: 0.45rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid color-mix(in oklab, var(--color-ink) 7%, transparent);
+  }
+
+  .session-table th {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+    background: color-mix(in oklab, var(--color-mint-soft) 22%, white);
+  }
+
+  .session-table tr.is-active td {
+    background: color-mix(in oklab, var(--color-mint-soft) 28%, white);
+  }
+
+  .session-table-note {
+    margin: 0.45rem 0.15rem 0;
+    font-size: 0.72rem;
+    color: var(--color-ink-soft);
+  }
+
+  .monitor-details {
+    margin-bottom: 1.25rem;
   }
 
   .app-nav {

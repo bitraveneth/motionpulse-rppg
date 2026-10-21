@@ -8,7 +8,8 @@ type Props = {
   series: Series[]
   height?: number
   className?: string
-  /** Highlight x-range as fraction [0,1] of width — unused; keep simple. */
+  /** Scrub cursor as fraction [0,1] along the time axis. */
+  cursorFraction?: number
   emptyLabel?: string
 }
 
@@ -28,12 +29,17 @@ export function SignalChart({
   series,
   height = 120,
   className = '',
+  cursorFraction,
   emptyLabel = 'No signal yet',
 }: Props) {
   const w = 400
   const h = height
   const pad = 8
   const hasData = series.some((s) => s.values.length > 1)
+  const cursorX =
+    cursorFraction != null && Number.isFinite(cursorFraction)
+      ? pad + Math.min(1, Math.max(0, cursorFraction)) * (w - pad * 2)
+      : null
 
   if (!hasData) {
     return (
@@ -54,6 +60,17 @@ export function SignalChart({
         role="img"
         aria-label="Signal chart"
       >
+        {cursorX != null && (
+          <line
+            x1={cursorX}
+            y1={0}
+            x2={cursorX}
+            y2={h}
+            stroke="rgba(14, 107, 106, 0.55)"
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+          />
+        )}
         {series.map((s, si) => {
           const norm = normalizeSeries(s.values)
           if (norm.length < 2) return null
