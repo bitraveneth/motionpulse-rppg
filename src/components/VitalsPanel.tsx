@@ -14,6 +14,8 @@ type Props = {
   sparkline: string | null
   /** 0–1 scrub → highlight on heart chart */
   scrub: number
+  /** When browsing a queued/analyzing clip with no result yet */
+  emptyHint?: string
 }
 
 /** Vital signs + heart-beat chart — honest about what rPPG can and cannot do. */
@@ -22,13 +24,17 @@ export function VitalsPanel({
   respiratory,
   sparkline,
   scrub,
+  emptyHint,
 }: Props) {
   if (!result) {
     return (
       <section className="vitals-panel vitals-empty" aria-label="Vital signs">
         <header>
           <h2>Vital signs</h2>
-          <p>Run a clip to see heart rate and signal quality.</p>
+          <p>
+            {emptyHint ??
+              'Run a clip to see heart rate and signal quality.'}
+          </p>
         </header>
         <div className="vitals-placeholder">
           <div>

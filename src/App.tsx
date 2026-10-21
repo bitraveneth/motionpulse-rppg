@@ -7,7 +7,11 @@ import { LocalLab } from './components/LocalLab'
 import { MetricPill } from './components/MetricPill'
 import { MonitorStage } from './components/MonitorStage'
 import { RecentRuns } from './components/RecentRuns'
-import { SessionStrip, type SessionRun } from './components/SessionStrip'
+import { SessionBrowser } from './components/SessionBrowser'
+import {
+  SessionStrip,
+  type SessionRun,
+} from './components/SessionStrip'
 import { ShareToFeed } from './components/ShareToFeed'
 import { SignalChart, SpectrumChart } from './components/SignalChart'
 import { VitalsPanel } from './components/VitalsPanel'
@@ -90,6 +94,8 @@ export default function App() {
   const labEnabled = isLocalLabEnabled()
 
   const videoRef = useRef<HTMLVideoElement>(null)
+  /** Hidden element used only while decoding/analyzing uploads (keeps preview free to browse). */
+  const analysisVideoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const webcamStreamRef = useRef<MediaStream | null>(null)
@@ -97,8 +103,18 @@ export default function App() {
   const lastTsRef = useRef(0)
   const thumbCapturedRef = useRef(false)
   const objectUrlRef = useRef<string | null>(null)
-  const uploadQueueRef = useRef<File[]>([])
+  /** Pending upload files keyed by session clip id (queue order). */
+  const pendingFilesRef = useRef<Map<string, File>>(new Map())
+  const queueOrderRef = useRef<string[]>([])
   const processingQueueRef = useRef(false)
+  /** Avoid re-applying the same clip when sessionRuns mutates in place. */
+  const appliedSessionIdRef = useRef<string | null>(null)
+  /** Object URLs owned by session clips — do not revoke until clear. */
+  const ownedUrlsRef = useRef<Set<string>>(new Set())
+  const sessionRunsRef = useRef<SessionRun[]>([])
+  sessionRunsRef.current = sessionRuns
+  const activeSessionIdRef = useRef<string | null>(null)
+  activeSessionIdRef.current = activeSessionId
 
   const synthetic = useMemo(
     () =>
@@ -199,10 +215,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMode])
 
+  // Seed the sample into the session once so multi-clip browse can include it.
+  useEffect(() => {
+    if (inputMode !== 'synthetic') return
+    if (sessionRunsRef.current.some((r) => r.source === 'sample')) return
+    ensureSampleInSession()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function revokeObjectUrl() {
+    // Drop transient preview URL only when it is not owned by a session clip.
     if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current)
+      if (!ownedUrlsRef.current.has(objectUrlRef.current)) {
+        URL.revokeObjectURL(objectUrlRef.current)
+      }
       objectUrlRef.current = null
+    }
+  }
+
+  function revokeAllSessionUrls(runs: SessionRun[]) {
+    for (const run of runs) {
+      if (run.objectUrl) {
+        URL.revokeObjectURL(run.objectUrl)
+        ownedUrlsRef.current.delete(run.objectUrl)
+      }
     }
   }
 
@@ -215,19 +251,197 @@ export default function App() {
     }
   }
 
-  function pushSessionRun(run: Omit<SessionRun, 'id' | 'at'> & { id?: string }) {
-    const entry: SessionRun = {
-      id: run.id ?? newId(),
-      name: run.name,
-      bpm: run.bpm,
-      riskLevel: run.riskLevel,
-      riskScore: run.riskScore,
-      thumbnail: run.thumbnail,
-      respiratoryBpm: run.respiratoryBpm,
-      at: Date.now(),
+  function shortClipName(name: string) {
+    return name.length > 28 ? `${name.slice(0, 26)}…` : name
+  }
+
+  function patchSessionRun(id: string, patch: Partial<SessionRun>) {
+    setSessionRuns((prev) =>
+      prev.map((run) => (run.id === id ? { ...run, ...patch } : run)),
+    )
+  }
+
+  function clearSession() {
+    setSessionRuns((prev) => {
+      revokeAllSessionUrls(prev)
+      return []
+    })
+    setActiveSessionId(null)
+    appliedSessionIdRef.current = null
+    pendingFilesRef.current.clear()
+    queueOrderRef.current = []
+    setQueueLeft(0)
+  }
+
+  async function attachVideoUrl(url: string | null, seekFrac = 0.5) {
+    const video = videoRef.current
+    if (!video) return
+    video.srcObject = null
+    if (!url) {
+      video.removeAttribute('src')
+      video.load()
+      setHasVideo(false)
+      return
     }
-    setSessionRuns((prev) => [entry, ...prev].slice(0, SESSION_MAX))
+    if (video.src !== url) {
+      video.src = url
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve()
+        video.onerror = () => reject(new Error('Could not load that video'))
+      }).catch(() => undefined)
+    }
+    setHasVideo(true)
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      video.currentTime = seekFrac * video.duration
+    }
+  }
+
+  async function selectSessionClip(
+    id: string,
+    opts?: { force?: boolean; clip?: SessionRun },
+  ) {
+    const force = opts?.force ?? false
+    if (!force && appliedSessionIdRef.current === id && activeSessionId === id) {
+      setActiveSessionId(id)
+      return
+    }
+    const clip =
+      opts?.clip ?? sessionRunsRef.current.find((r) => r.id === id)
+    if (!clip) return
+
+    const total = sessionRunsRef.current.length
+    const index = sessionRunsRef.current.findIndex((r) => r.id === id)
+    const indexLabel =
+      index >= 0 ? `clip ${index + 1} of ${total}` : 'clip'
+
+    setActiveSessionId(id)
+    appliedSessionIdRef.current = id
+    setError(null)
+    stopWebcam()
+
+    if (clip.status === 'queued') {
+      setLive(null)
+      setShowStory(false)
+      setStage('idle')
+      setStageDetail(undefined)
+      setThumbnailData(null)
+      setUploadName(clip.name)
+      setDurationSec(0)
+      setScrub(0)
+      setInputMode(clip.source === 'sample' ? 'synthetic' : 'upload')
+      await attachVideoUrl(null)
+      setStatus(`Queued — “${clip.name}” will analyze next in this session.`)
+      return
+    }
+
+    if (clip.status === 'analyzing') {
+      setShowStory(false)
+      setStage('estimating_pulse')
+      setStageDetail('Analyzing this clip…')
+      setUploadName(clip.name)
+      setInputMode('upload')
+      setStatus(`Analyzing “${clip.name}”…`)
+      return
+    }
+
+    if (clip.status === 'error') {
+      setLive(null)
+      setShowStory(false)
+      setStage('idle')
+      setThumbnailData(null)
+      setUploadName(clip.name)
+      setDurationSec(0)
+      setScrub(0)
+      setInputMode('upload')
+      await attachVideoUrl(clip.objectUrl)
+      setError(clip.errorMessage ?? 'Could not analyze that clip')
+      setStatus(`Error on “${clip.name}” — try another clip.`)
+      return
+    }
+
+    // done
+    setShowStory(true)
+    setStage('done')
+    setStageDetail(undefined)
+    setUploadName(clip.name)
+    setThumbnailData(clip.thumbnail)
+    setDurationSec(clip.durationSec)
+    setScrub(0.5)
+    setBusy(false)
+
+    if (clip.source === 'sample') {
+      setInputMode('synthetic')
+      objectUrlRef.current = null
+      await attachVideoUrl(null)
+      if (clip.buffer) setLive(clip.buffer)
+      else setLive(null)
+      setStatus(
+        `Sample ${indexLabel} — scrub the timeline or flip to another clip.`,
+      )
+      return
+    }
+
+    setInputMode(clip.source === 'webcam' ? 'webcam' : 'upload')
+    objectUrlRef.current = clip.objectUrl
+    if (clip.buffer) setLive(clip.buffer)
+    else setLive(null)
+    await attachVideoUrl(clip.objectUrl, 0.5)
+    setStatus(
+      `Viewing ${indexLabel} — “${clip.name}”. Use the session slider to browse.`,
+    )
+  }
+
+  function ensureSampleInSession() {
+    const buffer = {
+      frames: synthetic.frames,
+      roiRgb: synthetic.roiRgb,
+      sampleRateHz: synthetic.sampleRateHz,
+    }
+    let pipeline: PipelineResult | null = null
+    try {
+      pipeline = runPipeline({
+        frames: buffer.frames,
+        roiRgb: buffer.roiRgb,
+        sampleRateHz: buffer.sampleRateHz,
+        controls,
+      })
+    } catch (e) {
+      console.error(e)
+    }
+    const breath = pipeline
+      ? estimateRespiratoryRate(
+          pipeline.suppression.gated.length > 24
+            ? pipeline.suppression.gated
+            : pipeline.motion.global,
+          buffer.sampleRateHz,
+        )
+      : null
+    const risk = pipeline
+      ? conflictRiskLabel(pipeline.conflict.combined)
+      : null
+
+    const existing = sessionRunsRef.current.find((r) => r.source === 'sample')
+    const entry: SessionRun = {
+      id: existing?.id ?? newId(),
+      name: 'Sample',
+      status: 'done',
+      source: 'sample',
+      bpm: pipeline?.gatedBpm ?? null,
+      riskLevel: risk?.level ?? null,
+      riskScore: pipeline?.conflict.combined ?? null,
+      thumbnail: existing?.thumbnail ?? null,
+      respiratoryBpm: breath ? breath.breathsPerMin : null,
+      at: Date.now(),
+      durationSec: buffer.frames.length / buffer.sampleRateHz,
+      objectUrl: null,
+      buffer,
+    }
+    setSessionRuns((prev) => {
+      const without = prev.filter((r) => r.source !== 'sample')
+      return [entry, ...without].slice(0, SESSION_MAX)
+    })
     setActiveSessionId(entry.id)
+    appliedSessionIdRef.current = entry.id
   }
 
   async function handleInputMode(mode: InputMode) {
@@ -241,13 +455,18 @@ export default function App() {
     if (mode === 'synthetic') {
       stopWebcam()
       revokeObjectUrl()
-      setLive(null)
-      setUploadName(null)
+      setUploadName('Sample')
       setShowStory(true)
       setHasVideo(false)
       setDurationSec(12)
+      setLive({
+        frames: synthetic.frames,
+        roiRgb: synthetic.roiRgb,
+        sampleRateHz: synthetic.sampleRateHz,
+      })
+      ensureSampleInSession()
       setStatus(
-        'Sample ready — scrub the timeline or upload a batch of face clips.',
+        'Sample ready — scrub the timeline, or upload several clips and browse with the session slider.',
       )
       return
     }
@@ -408,7 +627,15 @@ export default function App() {
 
   async function handleUpload(
     file: File,
-  ): Promise<{ pipeline: PipelineResult; thumbnail: string | null; fps: number } | null> {
+    clipId: string,
+  ): Promise<{
+    pipeline: PipelineResult
+    thumbnail: string | null
+    fps: number
+    buffer: LiveBuffer
+    objectUrl: string
+    durationSec: number
+  } | null> {
     if (!file.type.startsWith('video/') && !/\.(mp4|webm|mov|m4v|avi)$/i.test(file.name)) {
       setError('Please choose a video file (MP4, WebM, or MOV work best).')
       setStatus('That file does not look like a video.')
@@ -425,7 +652,11 @@ export default function App() {
     setStage('optimizing')
     setStageDetail('Capping resolution (~720p) and length (~15s)…')
     setStatus(`Optimizing “${file.name}”…`)
+    setActiveSessionId(clipId)
+    appliedSessionIdRef.current = clipId
+    patchSessionRun(clipId, { status: 'analyzing' })
     stopWebcam()
+    let createdUrl: string | null = null
     try {
       const optimized = await optimizeVideoFile(file, {
         onProgress: (pct) => {
@@ -448,21 +679,36 @@ export default function App() {
       setStageDetail('Loading clip…')
       revokeObjectUrl()
       const url = URL.createObjectURL(workFile)
-      objectUrlRef.current = url
-      const video = videoRef.current!
-      video.srcObject = null
+      createdUrl = url
+      ownedUrlsRef.current.add(url)
+      // Decode on a hidden video so the main preview can keep browsing other clips.
+      let video = analysisVideoRef.current
+      if (!video) {
+        video = document.createElement('video')
+        video.playsInline = true
+        video.muted = true
+        video.preload = 'auto'
+        analysisVideoRef.current = video
+      }
       video.src = url
       await new Promise<void>((resolve, reject) => {
-        video.onloadedmetadata = () => resolve()
-        video.onerror = () => reject(new Error('Could not load that video'))
+        video!.onloadedmetadata = () => resolve()
+        video!.onerror = () => reject(new Error('Could not load that video'))
       })
-      setHasVideo(true)
-      setDurationSec(video.duration || optimized.durationSec || 0)
+      const durationSec = video.duration || optimized.durationSec || 0
+      // Mirror onto the visible stage when the user is still on this clip.
+      if (activeSessionIdRef.current === clipId) {
+        objectUrlRef.current = url
+        await attachVideoUrl(url, 0.5)
+        setDurationSec(durationSec)
+      }
       setStatus('Finding the face in your video…')
       await getFaceLandmarker()
       const detected = await sampleVideoLandmarks(video, 12, (pct) => {
         setStageDetail(`Reading landmarks… ${Math.round(pct * 100)}%`)
-        setStatus(`Reading face landmarks… ${Math.round(pct * 100)}%`)
+        if (activeSessionIdRef.current === clipId) {
+          setStatus(`Reading face landmarks… ${Math.round(pct * 100)}%`)
+        }
       })
 
       if (detected.length < 16) {
@@ -473,7 +719,9 @@ export default function App() {
 
       setStage('estimating_pulse')
       setStageDetail('Sampling skin color and motion…')
-      setStatus('Estimating pulse from trusted face regions…')
+      if (activeSessionIdRef.current === clipId) {
+        setStatus('Estimating pulse from trusted face regions…')
+      }
 
       const canvas = canvasRef.current!
       const ctx = canvas.getContext('2d')!
@@ -483,7 +731,7 @@ export default function App() {
       for (const d of detected) {
         video.currentTime = d.timestampMs / 1000
         await new Promise<void>((r) => {
-          video.onseeked = () => r()
+          video!.onseeked = () => r()
         })
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
@@ -513,7 +761,7 @@ export default function App() {
       const mid = detected[Math.floor(detected.length / 2)]!
       video.currentTime = mid.timestampMs / 1000
       await new Promise<void>((r) => {
-        video.onseeked = () => r()
+        video!.onseeked = () => r()
       })
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
@@ -521,10 +769,6 @@ export default function App() {
       maybeCaptureThumb(canvas, mid.landmarks)
 
       const buffer: LiveBuffer = { frames, roiRgb, sampleRateHz: fps }
-      setLive(buffer)
-      setScrub(0.5)
-      setStage('done')
-      setShowStory(true)
 
       let pipeline: PipelineResult | null = null
       try {
@@ -546,25 +790,58 @@ export default function App() {
               quality: 0.7,
             })
           : null
-      if (thumb) {
-        thumbCapturedRef.current = true
-        setThumbnailData(thumb)
-      }
 
-      setStatus(
-        `Done — ${frames.length} frames from “${file.name}”. Scrub the timeline to review.`,
-      )
-      if (!pipeline) return null
-      return { pipeline, thumbnail: thumb, fps }
+      if (activeSessionIdRef.current === clipId) {
+        setLive(buffer)
+        setScrub(0.5)
+        setStage('done')
+        setShowStory(true)
+        setDurationSec(durationSec)
+        if (thumb) {
+          thumbCapturedRef.current = true
+          setThumbnailData(thumb)
+        }
+        objectUrlRef.current = url
+        await attachVideoUrl(url, 0.5)
+        setStatus(
+          `Done — ${frames.length} frames from “${file.name}”. Scrub or use the session slider.`,
+        )
+      }
+      if (!pipeline) {
+        if (createdUrl) {
+          ownedUrlsRef.current.delete(createdUrl)
+          URL.revokeObjectURL(createdUrl)
+        }
+        return null
+      }
+      return {
+        pipeline,
+        thumbnail: thumb,
+        fps,
+        buffer,
+        objectUrl: url,
+        durationSec,
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not analyze that video')
+      const message =
+        e instanceof Error ? e.message : 'Could not analyze that video'
+      setError(message)
       setStatus('Upload failed — try another clip, or load the sample.')
       setLive(null)
-      setUploadName(null)
       setStage('idle')
       setShowStory(false)
       setHasVideo(false)
-      revokeObjectUrl()
+      if (createdUrl) {
+        ownedUrlsRef.current.delete(createdUrl)
+        URL.revokeObjectURL(createdUrl)
+        if (objectUrlRef.current === createdUrl) objectUrlRef.current = null
+      } else {
+        revokeObjectUrl()
+      }
+      patchSessionRun(clipId, {
+        status: 'error',
+        errorMessage: message,
+      })
       return null
     } finally {
       setBusy(false)
@@ -573,13 +850,49 @@ export default function App() {
   }
 
   async function enqueueFiles(files: FileList | File[]) {
-    const list = Array.from(files).slice(0, SESSION_MAX)
-    if (list.length === 0) return
-    uploadQueueRef.current.push(...list)
-    setQueueLeft(uploadQueueRef.current.length)
+    const room = Math.max(0, SESSION_MAX - sessionRunsRef.current.length)
+    const list = Array.from(files)
+      .filter(
+        (f) =>
+          f.type.startsWith('video/') ||
+          /\.(mp4|webm|mov|m4v|avi)$/i.test(f.name),
+      )
+      .slice(0, room)
+    if (list.length === 0) {
+      if (sessionRunsRef.current.length >= SESSION_MAX) {
+        setStatus(`Session is full (${SESSION_MAX} clips). Clear session to add more.`)
+      }
+      return
+    }
+
+    const entries: SessionRun[] = list.map((file) => {
+      const id = newId()
+      pendingFilesRef.current.set(id, file)
+      queueOrderRef.current.push(id)
+      return {
+        id,
+        name: shortClipName(file.name),
+        status: 'queued' as const,
+        source: 'upload' as const,
+        bpm: null,
+        riskLevel: null,
+        riskScore: null,
+        thumbnail: null,
+        respiratoryBpm: null,
+        at: Date.now(),
+        durationSec: 0,
+        objectUrl: null,
+        buffer: null,
+      }
+    })
+
+    setSessionRuns((prev) => [...prev, ...entries].slice(0, SESSION_MAX))
+    setQueueLeft(queueOrderRef.current.length)
+    const first = entries[0]!
+    setActiveSessionId(first.id)
     setStatus(
       list.length > 1
-        ? `Queued ${list.length} clips — analyzing one at a time (privacy: local only).`
+        ? `Queued ${list.length} clips — analyzing one at a time. Use the slider to browse.`
         : `Analyzing “${list[0]!.name}”…`,
     )
     await drainUploadQueue()
@@ -589,27 +902,46 @@ export default function App() {
     if (processingQueueRef.current) return
     processingQueueRef.current = true
     try {
-      while (uploadQueueRef.current.length > 0) {
-        setQueueLeft(uploadQueueRef.current.length)
-        const file = uploadQueueRef.current.shift()!
-        const outcome = await handleUpload(file)
+      while (queueOrderRef.current.length > 0) {
+        setQueueLeft(queueOrderRef.current.length)
+        const clipId = queueOrderRef.current.shift()!
+        const file = pendingFilesRef.current.get(clipId)
+        pendingFilesRef.current.delete(clipId)
+        if (!file) continue
+
+        const outcome = await handleUpload(file, clipId)
         if (outcome) {
-          const { pipeline, thumbnail, fps } = outcome
+          const { pipeline, thumbnail, fps, buffer, objectUrl, durationSec } =
+            outcome
           const riskLabel = conflictRiskLabel(pipeline.conflict.combined)
           const series =
             pipeline.suppression.gated.length > 24
               ? pipeline.suppression.gated
               : pipeline.motion.global
           const breath = estimateRespiratoryRate(series, fps)
-          pushSessionRun({
-            name:
-              file.name.length > 28 ? `${file.name.slice(0, 26)}…` : file.name,
+          const done: SessionRun = {
+            id: clipId,
+            name: shortClipName(file.name),
+            status: 'done',
+            source: 'upload',
             bpm: pipeline.gatedBpm,
             riskLevel: riskLabel.level,
             riskScore: pipeline.conflict.combined,
             thumbnail,
             respiratoryBpm: breath ? breath.breathsPerMin : null,
-          })
+            at: Date.now(),
+            durationSec,
+            objectUrl,
+            buffer,
+          }
+          patchSessionRun(clipId, done)
+          // Keep the stage on the clip that just finished if user hasn't jumped away.
+          if (
+            appliedSessionIdRef.current === clipId ||
+            activeSessionIdRef.current === clipId
+          ) {
+            await selectSessionClip(clipId, { force: true, clip: done })
+          }
         }
       }
     } finally {
@@ -638,6 +970,16 @@ export default function App() {
   const lastLandmarks = scrubLandmarks ?? source?.frames[source.frames.length - 1] ?? null
   const hasResult = Boolean(result)
   const runSource = modeToSource(inputMode)
+  const activeClip =
+    sessionRuns.find((r) => r.id === activeSessionId) ?? null
+  const vitalsEmptyHint =
+    activeClip?.status === 'analyzing'
+      ? `Analyzing “${activeClip.name}”…`
+      : activeClip?.status === 'queued'
+        ? `“${activeClip.name}” is queued — vitals appear when it finishes.`
+        : activeClip?.status === 'error'
+          ? `Could not analyze “${activeClip.name}”.`
+          : undefined
 
   return (
     <div className="app-shell">
@@ -691,9 +1033,9 @@ export default function App() {
             </h1>
             <p className="headline">Face video → pulse you can see</p>
             <p className="tagline">
-              Large preview with live face detection, a big timeline slider, and
-              honest vitals — heart rate from rPPG, breathing only when the clip
-              is long enough, never fake blood pressure.
+              Large preview with live face detection. Upload up to 10 face clips
+              and browse them one by one with the session slider — honest vitals
+              per clip, never fake blood pressure.
             </p>
           </header>
 
@@ -747,17 +1089,21 @@ export default function App() {
               respiratory={respiratory}
               sparkline={sparkline}
               scrub={scrub}
+              emptyHint={vitalsEmptyHint}
             />
           </div>
+
+          <SessionBrowser
+            clips={sessionRuns}
+            activeId={activeSessionId}
+            onSelect={(id) => void selectSessionClip(id, { force: true })}
+          />
 
           <SessionStrip
             runs={sessionRuns}
             activeId={activeSessionId}
-            onSelect={setActiveSessionId}
-            onClear={() => {
-              setSessionRuns([])
-              setActiveSessionId(null)
-            }}
+            onSelect={(id) => void selectSessionClip(id, { force: true })}
+            onClear={clearSession}
             max={SESSION_MAX}
           />
 

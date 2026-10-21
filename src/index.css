@@ -437,6 +437,230 @@
     background: color-mix(in oklab, white 70%, transparent);
   }
 
+  /* —— Session browser (one-at-a-time slider) —— */
+  .session-browser {
+    margin: 0 0 1.15rem;
+    padding: 0.85rem 1rem 1rem;
+    border-radius: 0.95rem;
+    background:
+      linear-gradient(
+        160deg,
+        color-mix(in oklab, var(--color-mint-soft) 35%, white),
+        color-mix(in oklab, white 88%, transparent)
+      );
+    border: 1px solid color-mix(in oklab, var(--color-sea) 18%, transparent);
+    animation: rise 0.5s ease both;
+  }
+
+  .session-browser-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.35rem 1rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .session-browser-label {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .session-browser-count {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--color-sea-deep);
+  }
+
+  .session-browser-name {
+    font-weight: 600;
+    color: var(--color-ink-soft);
+  }
+
+  .session-browser-nav {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.65rem;
+    align-items: center;
+  }
+
+  .session-nav-btn {
+    appearance: none;
+    border: 1px solid color-mix(in oklab, var(--color-sea) 28%, transparent);
+    background: color-mix(in oklab, white 90%, transparent);
+    color: var(--color-sea-deep);
+    font-weight: 700;
+    font-size: 0.88rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 0.55rem;
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .session-nav-btn:hover:not(:disabled) {
+    border-color: var(--color-sea);
+    background: white;
+  }
+
+  .session-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .session-browser-slider-wrap {
+    min-width: 0;
+  }
+
+  .session-clip-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 0.9rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-sea) 16%, white);
+    border: 1px solid color-mix(in oklab, var(--color-sea) 26%, transparent);
+    cursor: pointer;
+  }
+
+  .session-clip-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--color-sea-deep);
+    border: 3px solid white;
+    box-shadow: 0 4px 12px -4px rgba(12, 34, 51, 0.55);
+    cursor: grab;
+  }
+
+  .session-clip-slider::-moz-range-thumb {
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--color-sea-deep);
+    border: 3px solid white;
+    box-shadow: 0 4px 12px -4px rgba(12, 34, 51, 0.55);
+    cursor: grab;
+  }
+
+  .session-dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+  }
+
+  .session-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    padding: 0;
+    border-radius: 50%;
+    border: none;
+    background: color-mix(in oklab, var(--color-ink) 22%, white);
+    cursor: pointer;
+  }
+
+  .session-dot.is-active {
+    background: var(--color-sea);
+    transform: scale(1.25);
+  }
+
+  .session-dot.status-analyzing {
+    background: #d4a017;
+    animation: bpm-ring 1.4s ease-in-out infinite;
+  }
+
+  .session-dot.status-queued {
+    background: color-mix(in oklab, var(--color-ink) 14%, white);
+  }
+
+  .session-dot.status-error {
+    background: #c45c3e;
+  }
+
+  .session-filmstrip {
+    display: flex;
+    gap: 0.45rem;
+    margin: 0.75rem 0 0;
+    padding: 0.15rem 0.1rem 0;
+    list-style: none;
+    overflow-x: auto;
+  }
+
+  .session-film {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 3.1rem;
+    height: 3.1rem;
+    padding: 0;
+    border-radius: 0.45rem;
+    border: 2px solid transparent;
+    background: color-mix(in oklab, var(--color-mint-soft) 40%, white);
+    cursor: pointer;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .session-film img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .session-film.is-active {
+    border-color: var(--color-sea);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-mint) 40%, transparent);
+  }
+
+  .session-film-ph {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--color-ink-soft);
+  }
+
+  .session-film-idx {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    color: white;
+    background: rgba(12, 34, 51, 0.72);
+    border-radius: 0.25rem;
+    padding: 0 0.22rem;
+    line-height: 1.3;
+  }
+
+  .session-browser-pending {
+    margin: 0.65rem 0 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-sea-deep);
+  }
+
+  .session-head-sub {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-ink-soft);
+  }
+
+  .session-card.status-analyzing .session-bpm,
+  .session-card.status-queued .session-bpm {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--color-ink-soft);
+  }
+
   /* —— Session strip —— */
   .session-strip {
     margin-bottom: 1.25rem;

@@ -1,14 +1,32 @@
 import type { RiskLevel } from '../lib/feed/types'
+import type { FrameLandmarks, RoiRgbTrace } from '../lib/rppg/types'
+
+export type SessionClipStatus = 'queued' | 'analyzing' | 'done' | 'error'
+
+/** Per-clip analysis buffer kept in-browser for one-by-one browsing. */
+export type SessionBuffer = {
+  frames: FrameLandmarks[]
+  roiRgb: RoiRgbTrace
+  sampleRateHz: number
+}
 
 export type SessionRun = {
   id: string
   name: string
-  bpm: number
-  riskLevel: RiskLevel
-  riskScore: number
+  status: SessionClipStatus
+  source: 'upload' | 'sample' | 'webcam'
+  bpm: number | null
+  riskLevel: RiskLevel | null
+  riskScore: number | null
   thumbnail: string | null
   at: number
   respiratoryBpm: number | null
+  durationSec: number
+  /** Object URL for the optimized clip (upload). Revoke on clear. */
+  objectUrl: string | null
+  /** Landmark / ROI buffer so vitals + overlay restore on browse. */
+  buffer: SessionBuffer | null
+  errorMessage?: string | null
 }
 
 type Props = {
@@ -21,7 +39,7 @@ type Props = {
 
 const MAX_DEFAULT = 10
 
-/** Local session of recent analyses (privacy: metrics + thumb only). */
+/** Local session of recent analyses (privacy: metrics + thumb only in feed). */
 export function SessionStrip({
   runs,
   activeId,
@@ -36,8 +54,8 @@ export function SessionStrip({
         <header className="panel-head">
           <h2>Session</h2>
           <p>
-            Queue up to {max} face clips — each stays in your browser. When
-            several finish, compare BPM and motion risk below.
+            Queue up to {max} face clips — browse them one by one with the
+            slider under the preview. Each clip stays in your browser.
           </p>
         </header>
       </section>
@@ -45,15 +63,31 @@ export function SessionStrip({
   }
 
   const showTable = list.length >= 2
+  const doneCount = list.filter((r) => r.status === 'done').length
 
   return (
     <section className="session-strip" aria-label="Session runs">
       <header className="session-head">
         <div>
-          <h2>Session · {list.length}/{max}</h2>
-          <p>Local only — metrics and tiny thumbs, never raw video upload.</p>
+          <h2>
+            Session · {list.length}/{max}
+            {doneCount < list.length ? (
+              <span className="session-head-sub">
+                {' '}
+                · {doneCount} ready
+              </span>
+            ) : null}
+          </h2>
+          <p>
+            Use the slider under the video to flip clips one at a time. Local
+            only — metrics and tiny thumbs, never raw video upload.
+          </p>
         </div>
-        <button type="button" className="cta cta-secondary session-clear" onClick={onClear}>
+        <button
+          type="button"
+          className="cta cta-secondary session-clear"
+          onClick={onClear}
+        >
           Clear session
         </button>
       </header>
@@ -63,7 +97,7 @@ export function SessionStrip({
           <li key={run.id}>
             <button
               type="button"
-              className={`session-card risk-${run.riskLevel} ${activeId === run.id ? 'is-active' : ''}`}
+              className={`session-card status-${run.status} ${run.riskLevel ? `risk-${run.riskLevel}` : ''} ${activeId === run.id ? 'is-active' : ''}`}
               onClick={() => onSelect(run.id)}
             >
               {run.thumbnail ? (
@@ -75,18 +109,28 @@ export function SessionStrip({
                   height={56}
                 />
               ) : (
-                <div className="session-thumb session-thumb-ph" aria-hidden />
+                <div
+                  className={`session-thumb session-thumb-ph status-${run.status}`}
+                  aria-hidden
+                />
               )}
               <div className="session-card-body">
                 <span className="session-name">{run.name}</span>
                 <span className="session-bpm">
-                  {run.bpm.toFixed(0)} BPM
+                  {run.status === 'done' && run.bpm != null
+                    ? `${run.bpm.toFixed(0)} BPM`
+                    : statusLabel(run.status)}
                 </span>
                 <span className="session-meta">
-                  Risk {run.riskScore.toFixed(2)}
-                  {run.respiratoryBpm != null
-                    ? ` · ~${run.respiratoryBpm.toFixed(0)} /min breath`
-                    : ''}
+                  {run.status === 'done' && run.riskScore != null
+                    ? `Risk ${run.riskScore.toFixed(2)}${
+                        run.respiratoryBpm != null
+                          ? ` · ~${run.respiratoryBpm.toFixed(0)} /min breath`
+                          : ''
+                      }`
+                    : run.status === 'error'
+                      ? (run.errorMessage ?? 'Failed')
+                      : 'Waiting in queue…'}
                 </span>
               </div>
             </button>
@@ -100,6 +144,7 @@ export function SessionStrip({
             <thead>
               <tr>
                 <th>Clip</th>
+                <th>Status</th>
                 <th>BPM</th>
                 <th>Risk</th>
                 <th>Breath*</th>
@@ -113,9 +158,14 @@ export function SessionStrip({
                   className={activeId === run.id ? 'is-active' : undefined}
                 >
                   <td>{run.name}</td>
-                  <td className="tabular-nums">{run.bpm.toFixed(0)}</td>
+                  <td>{statusLabel(run.status)}</td>
                   <td className="tabular-nums">
-                    {run.riskLevel} ({run.riskScore.toFixed(2)})
+                    {run.bpm != null ? run.bpm.toFixed(0) : '—'}
+                  </td>
+                  <td className="tabular-nums">
+                    {run.riskLevel != null && run.riskScore != null
+                      ? `${run.riskLevel} (${run.riskScore.toFixed(2)})`
+                      : '—'}
                   </td>
                   <td className="tabular-nums">
                     {run.respiratoryBpm != null
@@ -134,6 +184,13 @@ export function SessionStrip({
       )}
     </section>
   )
+}
+
+function statusLabel(status: SessionClipStatus) {
+  if (status === 'analyzing') return 'Analyzing…'
+  if (status === 'queued') return 'Queued'
+  if (status === 'error') return 'Error'
+  return 'Done'
 }
 
 function formatClock(ms: number) {
