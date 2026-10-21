@@ -23,6 +23,8 @@ type Props = {
   status: string
   /** Hide overlay source buttons when hero / nav already provides CTAs */
   showCtaBar?: boolean
+  /** Hide the footer status line (scan session uses progress outside the frame). */
+  hideFooterStatus?: boolean
 }
 
 /** Large monitoring surface: face video + detection box + timeline slider. */
@@ -43,6 +45,7 @@ export function MonitorStage({
   demoLoading = false,
   status,
   showCtaBar = true,
+  hideFooterStatus = false,
 }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const box = faceBoxFromLandmarks(landmarks)
@@ -235,9 +238,11 @@ export function MonitorStage({
         <span className="monitor-time tabular-nums">{timeLabel}</span>
       </div>
 
-      <p className="monitor-status" role="status">
-        {status}
-      </p>
+      {hideFooterStatus ? (
+        <p className="sr-only" role="status">{status}</p>
+      ) : (
+        <p className="monitor-status" role="status">{status}</p>
+      )}
     </section>
   )
 }

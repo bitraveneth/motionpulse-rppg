@@ -78,9 +78,7 @@ export function ScanPage() {
   const [searchParams] = useSearchParams()
   const [controls, setControls] = useState<DemoControls>(DEFAULT_CONTROLS)
   const [inputMode, setInputMode] = useState<InputMode>('synthetic')
-  const [status, setStatus] = useState(
-    'Sample ready — face preview below. Scrub the timeline, or upload several clips.',
-  )
+  const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState<LiveBuffer | null>(null)
@@ -499,7 +497,7 @@ export function ScanPage() {
       })
       ensureSampleInSession()
       setStatus(
-        'Sample ready — scrub the timeline, or upload several clips and browse with the session slider.',
+        '',
       )
       return
     }
@@ -1106,6 +1104,7 @@ export function ScanPage() {
                   demoLoading={demoLoading}
                   status={status}
                   showCtaBar
+                  hideFooterStatus
                 />
               </div>
 

@@ -888,9 +888,20 @@
   }
 
   .scan-page-head p {
-    margin: 0.45rem 0 0;
+    margin: 0.35rem 0 0;
     color: var(--site-ink-soft);
     max-width: 40rem;
+    font-size: 0.9rem;
+  }
+
+  @media (min-width: 900px) {
+    .scan-page-head p {
+      display: none;
+    }
+
+    .scan-page-head h1 {
+      font-size: 1.35rem;
+    }
   }
 
   .scan-alerts {
@@ -908,7 +919,7 @@
   }
 
   .scan-session-frame {
-    --scan-session-min-h: calc(100dvh - var(--nav-h) - 8.25rem);
+    --scan-session-min-h: calc(100dvh - var(--nav-h) - 5.75rem);
     min-width: 0;
     width: 100%;
     min-height: max(28rem, var(--scan-session-min-h));
@@ -970,33 +981,117 @@
 
   .scan-vitals-strip {
     flex-shrink: 0;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    gap: 0.75rem;
-    overflow-x: auto;
-    overflow-y: visible;
-    padding: 0.65rem 0 0.15rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+    padding: 0.7rem 0 0.1rem;
     margin: 0;
     border-top: 1px solid var(--site-line);
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
     min-width: 0;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
-  @media (min-width: 900px) {
+  @media (max-width: 720px) {
     .scan-vitals-strip {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      overflow-x: visible;
-      margin: 0;
-      padding: 0;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 0.25rem;
+    }
+  }
+
+  .scan-vital-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 6.75rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--site-line);
+    background: var(--site-bg);
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  @media (max-width: 720px) {
+    .scan-vital-card {
+      flex: 0 0 auto;
+      width: min(17.5rem, 88vw);
+      min-width: min(17.5rem, 88vw);
+      scroll-snap-align: start;
     }
 
-    .scan-vitals-strip .vitals-scan-card {
-      width: auto;
-      min-width: 0;
+    .scan-vital-card:last-child {
+      width: min(19rem, 92vw);
+      min-width: min(19rem, 92vw);
+    }
+  }
+
+  .scan-vital-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--site-ink-soft);
+  }
+
+  .scan-vital-metric {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.4rem;
+    margin-top: 0.2rem;
+    min-height: 2.1rem;
+  }
+
+  .scan-vital-value {
+    font-family: var(--font-display);
+    font-size: 1.85rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--site-ink);
+  }
+
+  .scan-vital-value-word {
+    font-size: 1.2rem;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .scan-vital-unit {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--site-ink-soft);
+  }
+
+  .scan-vital-note {
+    margin: auto 0 0;
+    padding-top: 0.4rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--site-ink-soft);
+  }
+
+  .scan-session-frame .monitor-cta-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.65rem;
+  }
+
+  .scan-session-frame .monitor-cta-bar .cta {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 0;
+    justify-content: center;
+    font-size: 0.8125rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  @media (min-width: 720px) {
+    .scan-session-frame .monitor-cta-bar .cta {
+      flex: 0 1 auto;
     }
   }
 
@@ -1043,17 +1138,19 @@
 
   @media (min-width: 900px) {
     .scan-session-aside .scan-region-trust-list {
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
       gap: 0;
       min-height: 100%;
-      padding: 0.25rem 0 0.5rem;
+      padding: 0.35rem 0 0.65rem;
     }
   }
 
   .scan-session-aside .scan-region-trust-row {
-    grid-template-columns: minmax(0, 1fr) 2.5rem;
+    grid-template-columns: minmax(0, 1fr) 2.75rem;
     grid-template-rows: auto auto;
-    gap: 0.25rem 0.45rem;
-    font-size: 0.875rem;
+    gap: 0.3rem 0.5rem;
+    font-size: 0.9375rem;
   }
 
   .scan-session-aside .scan-region-trust-label {
