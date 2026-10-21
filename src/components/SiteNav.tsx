@@ -1,21 +1,17 @@
 import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { isLocalLabEnabled } from '../lib/lab/enabled'
 
 type Props = {
-  labEnabled: boolean
-  onTrySample: () => void
-  busy?: boolean
+  /** Primary pill CTA label */
+  primaryCta?: { label: string; to: string }
 }
 
-const LINKS: { href: string; label: string; labOnly?: boolean }[] = [
-  { href: '#monitor', label: 'Monitor' },
-  { href: '#how-it-works', label: 'How it works' },
-  { href: '#vitals', label: 'Vitals' },
-  { href: '#demo-tools', label: 'Demo' },
-  { href: '#local-lab', label: 'Local lab', labOnly: true },
-]
-
-export function SiteNav({ labEnabled, onTrySample, busy = false }: Props) {
+export function SiteNav({ primaryCta }: Props) {
   const [open, setOpen] = useState(false)
+  const location = useLocation()
+  const labEnabled = isLocalLabEnabled()
+  const onHome = location.pathname === '/'
 
   useEffect(() => {
     if (!open) return
@@ -26,18 +22,29 @@ export function SiteNav({ labEnabled, onTrySample, busy = false }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  const links = LINKS.filter((l) => !l.labOnly || labEnabled)
-
-  function closeAndNav() {
+  function close() {
     setOpen(false)
   }
 
+  function sectionHref(id: string) {
+    return onHome ? `#${id}` : `/#${id}`
+  }
+
+  const links = [
+    { to: '/scan', label: 'Scan' },
+    { to: sectionHref('how-it-works'), label: 'How it works' },
+    { to: sectionHref('demo-tools'), label: 'Demo' },
+    ...(labEnabled ? [{ to: sectionHref('local-lab'), label: 'Local lab' }] : []),
+  ]
+
+  const cta = primaryCta ?? { label: 'Try sample', to: '/scan?action=sample' }
+
   return (
-    <header className="site-nav-wrap">
-      <nav className="site-nav" aria-label="Site">
-        <a className="site-nav-mark" href="#top" onClick={closeAndNav}>
+    <header className="site-nav-pill-wrap">
+      <nav className="site-nav-pill" aria-label="Site">
+        <Link className="site-nav-mark" to="/" onClick={close}>
           Motion<span>Pulse</span>
-        </a>
+        </Link>
 
         <button
           type="button"
@@ -46,7 +53,7 @@ export function SiteNav({ labEnabled, onTrySample, busy = false }: Props) {
           aria-controls="site-nav-panel"
           onClick={() => setOpen((v) => !v)}
         >
-          {open ? 'Close menu' : 'Menu'}
+          {open ? 'Close' : 'Menu'}
         </button>
 
         <div
@@ -55,28 +62,22 @@ export function SiteNav({ labEnabled, onTrySample, busy = false }: Props) {
         >
           <ul className="site-nav-links">
             {links.map((l) => (
-              <li key={l.href}>
-                <a href={l.href} onClick={closeAndNav}>
-                  {l.label}
-                </a>
+              <li key={l.label}>
+                {l.to.startsWith('/scan') ? (
+                  <Link to={l.to} onClick={close}>{l.label}</Link>
+                ) : (
+                  <a href={l.to} onClick={close}>{l.label}</a>
+                )}
               </li>
             ))}
           </ul>
-          <button
-            type="button"
+          <Link
+            to={cta.to}
             className="cta cta-primary site-nav-cta"
-            disabled={busy}
-            onClick={() => {
-              closeAndNav()
-              onTrySample()
-              document.getElementById('monitor')?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-              })
-            }}
+            onClick={close}
           >
-            Try sample
-          </button>
+            {cta.label}
+          </Link>
         </div>
       </nav>
     </header>

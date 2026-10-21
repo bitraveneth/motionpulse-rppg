@@ -655,4 +655,323 @@
     margin: 0 auto 1rem;
     padding: 0 1.15rem;
   }
+
+  /* —— Floating pill nav —— */
+  .site-nav-pill-wrap {
+    position: fixed;
+    top: 0.85rem;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    display: flex;
+    justify-content: center;
+    padding: 0 0.75rem;
+    pointer-events: none;
+  }
+
+  .site-nav-pill {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: min(100%, 920px);
+    padding: 0.55rem 0.85rem 0.55rem 1rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--site-line);
+    box-shadow: 0 12px 40px -24px rgba(20, 36, 51, 0.28);
+    backdrop-filter: blur(14px);
+    position: relative;
+  }
+
+  .site-nav-pill .site-nav-mark {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--site-ink);
+  }
+
+  .site-nav-pill .site-nav-panel {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .home-page,
+  .scan-page {
+    padding-top: calc(var(--nav-h) + 1.25rem);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  /* —— Marketing home —— */
+  .home-hero {
+    padding: 2rem 1.25rem 3rem;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .home-hero-inner {
+    max-width: var(--site-max);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.5rem;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  @media (min-width: 900px) {
+    .home-hero-inner {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr);
+      gap: 3rem;
+    }
+  }
+
+  .home-hero-copy {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .home-hero-copy h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 5.5vw, 3rem);
+    font-weight: 650;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+    color: var(--site-ink);
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    hyphens: auto;
+    max-width: 100%;
+  }
+
+  .home-hero-lead {
+    margin: 1rem 0 0;
+    font-size: 1.05rem;
+    line-height: 1.55;
+    color: var(--site-ink-soft);
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    max-width: 36rem;
+  }
+
+  .home-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 1.35rem;
+  }
+
+  .home-hero-actions .cta {
+    text-decoration: none;
+    text-align: center;
+  }
+
+  .home-hero-visual {
+    position: relative;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .home-hero-visual-svg {
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
+    display: block;
+  }
+
+  .home-hero-visual-caption {
+    margin: 0.65rem 0 0;
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--site-ink-soft);
+  }
+
+  /* —— Scan page —— */
+  .scan-page {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+    padding-bottom: 2.5rem;
+  }
+
+  .scan-page-head {
+    max-width: var(--site-max);
+    margin: 0 auto 1.25rem;
+    min-width: 0;
+  }
+
+  .scan-page-head h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    font-weight: 650;
+  }
+
+  .scan-page-head p {
+    margin: 0.45rem 0 0;
+    color: var(--site-ink-soft);
+    max-width: 40rem;
+  }
+
+  .scan-alerts {
+    max-width: var(--site-max);
+    margin: 0 auto 0.75rem;
+  }
+
+  .scan-stage {
+    max-width: var(--site-max);
+    margin: 0 auto;
+    min-width: 0;
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .scan-stage .monitor-frame {
+    max-height: min(52vh, 480px);
+  }
+
+  .scan-tools {
+    margin-top: 2rem;
+    padding-bottom: 1rem;
+  }
+
+  /* Horizontal vitals row */
+  .vitals-scan {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .vitals-scan-hint {
+    margin: 0 0 0.75rem;
+    font-size: 0.92rem;
+    color: var(--site-ink-soft);
+  }
+
+  .vitals-scan-row {
+    display: flex;
+    flex-direction: row;
+    gap: 0.75rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  @media (min-width: 720px) {
+    .vitals-scan-row {
+      overflow-x: visible;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .vitals-scan-card {
+    flex: 0 0 min(78%, 220px);
+    scroll-snap-align: start;
+    min-width: 0;
+    padding: 1rem 1.05rem;
+    border-radius: 0.85rem;
+    background: var(--site-surface);
+    border: 1px solid var(--site-line);
+    box-sizing: border-box;
+  }
+
+  @media (min-width: 720px) {
+    .vitals-scan-card {
+      flex: none;
+    }
+  }
+
+  .vitals-scan-card-primary {
+    background: var(--site-accent-soft);
+    border-color: rgba(26, 127, 114, 0.22);
+  }
+
+  .vitals-scan-value {
+    display: block;
+    margin-top: 0.2rem;
+    font-family: var(--font-display);
+    font-size: 2.1rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .vitals-scan-value-sm {
+    font-size: 1.25rem;
+  }
+
+  .vitals-scan-badge {
+    margin-top: 0.35rem;
+  }
+
+  .vitals-scan-wave {
+    margin-top: 1rem;
+    min-width: 0;
+  }
+
+  .vitals-scan-wave-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .vitals-scan-wave-head h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 650;
+  }
+
+  @media (max-width: 860px) {
+    .site-nav-pill .site-nav-toggle {
+      display: inline-flex;
+    }
+
+    .site-nav-pill .site-nav-panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 0.45rem);
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0.85rem 1rem;
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.98);
+      border: 1px solid var(--site-line);
+      box-shadow: 0 16px 40px -20px rgba(20, 36, 51, 0.3);
+      display: none;
+    }
+
+    .site-nav-pill .site-nav-panel.is-open {
+      display: flex;
+    }
+
+    .site-nav-pill .site-nav-links a {
+      display: block;
+      padding: 0.7rem 0;
+      font-size: 1rem;
+      text-decoration: none;
+      color: var(--site-ink-soft);
+      font-weight: 600;
+    }
+
+    .site-nav-pill .site-nav-cta {
+      width: 100%;
+      text-align: center;
+      margin-top: 0.35rem;
+      text-decoration: none;
+    }
+  }
 }
