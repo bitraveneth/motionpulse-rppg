@@ -1086,37 +1086,35 @@ export function ScanPage() {
             <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
           ) : null}
 
-          <div className="scan-session-top">
-            <div className="scan-monitor-card product-frame">
-              <MonitorStage
-                videoRef={videoRef}
-                canvasRef={canvasRef}
-                landmarks={lastLandmarks}
-                inputMode={inputMode}
-                busy={busy}
-                hasVideo={hasVideo}
-                scrub={scrub}
-                onScrub={handleScrub}
-                durationSec={durationSec}
-                onUploadClick={openUploadPicker}
-                onWebcam={() => void handleInputMode('webcam')}
-                onSample={() => void handleInputMode('synthetic')}
-                onLoadDemoSet={() => void loadDemoSet()}
-                demoLoading={demoLoading}
-                status={status}
-                showCtaBar
-              />
-            </div>
-
-            <ScanVitalCards
-              result={result}
-              respiratory={respiratory}
-              liveEstimating={
-                liveEstimating ||
-                (busy && stage === 'estimating_pulse' && Boolean(result))
-              }
+          <div className="scan-monitor-card product-frame">
+            <MonitorStage
+              videoRef={videoRef}
+              canvasRef={canvasRef}
+              landmarks={lastLandmarks}
+              inputMode={inputMode}
+              busy={busy}
+              hasVideo={hasVideo}
+              scrub={scrub}
+              onScrub={handleScrub}
+              durationSec={durationSec}
+              onUploadClick={openUploadPicker}
+              onWebcam={() => void handleInputMode('webcam')}
+              onSample={() => void handleInputMode('synthetic')}
+              onLoadDemoSet={() => void loadDemoSet()}
+              demoLoading={demoLoading}
+              status={status}
+              showCtaBar
             />
           </div>
+
+          <ScanVitalCards
+            result={result}
+            respiratory={respiratory}
+            liveEstimating={
+              liveEstimating ||
+              (busy && stage === 'estimating_pulse' && Boolean(result))
+            }
+          />
 
           {regionWeights ? (
             <RegionTrustLines weights={regionWeights} />
