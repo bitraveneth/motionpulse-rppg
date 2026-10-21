@@ -40,18 +40,21 @@ function emptyRoiRgb(): RoiRgbTrace {
 export default function App() {
   const [controls, setControls] = useState<DemoControls>(DEFAULT_CONTROLS)
   const [inputMode, setInputMode] = useState<InputMode>('synthetic')
-  const [status, setStatus] = useState('Ready — bundled synthetic sample loaded.')
+  const [status, setStatus] = useState(
+    'Sample ready — scroll down to see pulse, motion risk, and trusted face areas.',
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState<LiveBuffer | null>(null)
+  const [uploadName, setUploadName] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const webcamStreamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef<number>(0)
   const lastTsRef = useRef(0)
 
-  // Synthetic regenerates when artifact/BPM knobs change
   const synthetic = useMemo(
     () =>
       generateSyntheticSample({
@@ -88,11 +91,8 @@ export default function App() {
     }
   }, [source, controls])
 
-  const risk = result
-    ? conflictRiskLabel(result.conflict.combined)
-    : null
+  const risk = result ? conflictRiskLabel(result.conflict.combined) : null
 
-  // Stop webcam when leaving mode
   useEffect(() => {
     if (inputMode !== 'webcam') {
       stopWebcam()
@@ -113,20 +113,35 @@ export default function App() {
     setInputMode(mode)
     if (mode === 'synthetic') {
       setLive(null)
-      setStatus('Ready — bundled synthetic sample loaded.')
+      setUploadName(null)
+      setStatus(
+        'Sample ready — scroll down to see pulse, motion risk, and trusted face areas.',
+      )
       return
     }
     if (mode === 'webcam') {
+      setUploadName(null)
       await startWebcam()
     } else {
       setLive(null)
-      setStatus('Choose a short frontal face video to analyze.')
+      setUploadName(null)
+      setStatus('Choose a short face video to analyze.')
     }
+  }
+
+  function openUploadPicker() {
+    setError(null)
+    setInputMode('upload')
+    setLive(null)
+    setUploadName(null)
+    setStatus('Choose a short face video to analyze.')
+    // Defer so mode switch paints before the OS file dialog.
+    requestAnimationFrame(() => fileInputRef.current?.click())
   }
 
   async function startWebcam() {
     setBusy(true)
-    setStatus('Requesting webcam + loading MediaPipe…')
+    setStatus('Asking for camera access…')
     try {
       await getFaceLandmarker()
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -144,7 +159,7 @@ export default function App() {
         roiRgb: emptyRoiRgb(),
         sampleRateHz: 15,
       })
-      setStatus('Webcam live — collecting landmarks…')
+      setStatus('Camera on — keep your face centered. Results update as frames collect.')
       setBusy(false)
 
       const tick = async (ts: number) => {
@@ -188,7 +203,11 @@ export default function App() {
                     ...roiRgb[id],
                   ].slice(-180)
                 }
-                setStatus(`Webcam live — ${frames.length} frames buffered.`)
+                setStatus(
+                  frames.length < 16
+                    ? `Camera on — collecting frames (${frames.length}/16)…`
+                    : `Camera live — ${frames.length} frames. Results update below.`,
+                )
                 return {
                   frames,
                   roiRgb: nextRgb,
@@ -197,10 +216,10 @@ export default function App() {
               })
             }
           } else {
-            setStatus('No face detected — center your face in frame.')
+            setStatus('No face found — center your face in the camera view.')
           }
         } catch (e) {
-          setError(e instanceof Error ? e.message : 'Webcam detect failed')
+          setError(e instanceof Error ? e.message : 'Camera analysis failed')
         }
         rafRef.current = requestAnimationFrame(tick)
       }
@@ -210,17 +229,25 @@ export default function App() {
       setError(
         e instanceof Error
           ? e.message
-          : 'Could not start webcam. Check permissions.',
+          : 'Could not start the camera. Check browser permissions.',
       )
-      setStatus('Webcam unavailable.')
+      setStatus('Camera unavailable — try the sample or upload a video instead.')
       setInputMode('synthetic')
     }
   }
 
   async function handleUpload(file: File) {
+    if (!file.type.startsWith('video/') && !/\.(mp4|webm|mov|m4v|avi)$/i.test(file.name)) {
+      setError('Please choose a video file (MP4, WebM, or MOV work best).')
+      setStatus('That file does not look like a video.')
+      return
+    }
+
     setBusy(true)
     setError(null)
-    setStatus(`Loading ${file.name}…`)
+    setInputMode('upload')
+    setUploadName(file.name)
+    setStatus(`Loading “${file.name}”…`)
     stopWebcam()
     try {
       const url = URL.createObjectURL(file)
@@ -229,13 +256,19 @@ export default function App() {
       video.src = url
       await new Promise<void>((resolve, reject) => {
         video.onloadedmetadata = () => resolve()
-        video.onerror = () => reject(new Error('Could not load video'))
+        video.onerror = () => reject(new Error('Could not load that video'))
       })
-      setStatus('Running MediaPipe Face Landmarker…')
+      setStatus('Finding the face in your video…')
       await getFaceLandmarker()
       const detected = await sampleVideoLandmarks(video, 12, (pct) => {
-        setStatus(`Sampling landmarks… ${Math.round(pct * 100)}%`)
+        setStatus(`Reading face landmarks… ${Math.round(pct * 100)}%`)
       })
+
+      if (detected.length < 16) {
+        throw new Error(
+          'Not enough face frames found. Try a clearer, well-lit clip of a face.',
+        )
+      }
 
       const canvas = canvasRef.current!
       const ctx = canvas.getContext('2d')!
@@ -274,66 +307,117 @@ export default function App() {
 
       setLive({ frames, roiRgb, sampleRateHz: fps })
       setStatus(
-        `Upload ready — ${frames.length} frames @ ~${fps.toFixed(1)} Hz.`,
+        `Done — ${frames.length} frames from “${file.name}”. Results below updated automatically.`,
       )
       URL.revokeObjectURL(url)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload analysis failed')
-      setStatus('Upload failed — falling back to synthetic.')
-      setInputMode('synthetic')
+      setError(e instanceof Error ? e.message : 'Could not analyze that video')
+      setStatus('Upload failed — try another clip, or load the sample.')
       setLive(null)
+      setUploadName(null)
     } finally {
       setBusy(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  const lastLandmarks =
-    source?.frames[source.frames.length - 1] ?? null
+  const lastLandmarks = source?.frames[source.frames.length - 1] ?? null
+  const hasResult = Boolean(result)
 
   return (
     <div className="app-shell">
       <div className="atmosphere" aria-hidden />
+
       <header className="hero">
-        <p className="eyebrow">Interactive thesis demo · §§3.1.2–3.1.4</p>
-        <h1 className="brand">MotionPulse</h1>
+        <svg
+          className="hero-wave"
+          viewBox="0 0 280 120"
+          fill="none"
+          aria-hidden
+        >
+          <path
+            d="M0 72 C 28 40, 42 40, 70 72 S 112 104, 140 72 S 182 40, 210 72 S 252 104, 280 72"
+            stroke="#2EC4B6"
+            strokeWidth="3"
+            strokeLinecap="round"
+            opacity="0.85"
+          />
+          <path
+            d="M0 88 C 28 56, 42 56, 70 88 S 112 120, 140 88 S 182 56, 210 88 S 252 120, 280 88"
+            stroke="#0E6B6A"
+            strokeWidth="2"
+            strokeLinecap="round"
+            opacity="0.45"
+          />
+        </svg>
+
+        <h1 className="brand">
+          Motion<span>Pulse</span>
+        </h1>
+        <p className="headline">See your pulse from a face video</p>
         <p className="tagline">
-          Motion-aware rPPG — see when facial motion syncs with a candidate
-          pulse, soft-suppress suspicious energy, and reweight trustworthy ROIs.
-          Conflict scores are <strong>graded risk</strong>, not causality.
+          Load a clip or use your camera — MotionPulse estimates heart rate and
+          flags when face motion may muddy the signal.
         </p>
-        <div className="hero-metrics">
-          <MetricPill
-            label="Est. BPM"
-            value={
-              result ? `${result.estimatedBpm.toFixed(0)}` : '—'
-            }
-            tone="teal"
-            hint="Dominant frequency of candidate before gating"
-          />
-          <MetricPill
-            label="Conflict C"
-            value={
-              result ? result.conflict.combined.toFixed(2) : '—'
-            }
-            tone={
-              risk?.level === 'high' || risk?.level === 'elevated'
-                ? 'warn'
-                : 'amber'
-            }
-            hint="α·C_temp + β·C_spec — graded sync risk"
-          />
-          <MetricPill
-            label="Gate gain"
-            value={result ? result.suppression.gain.toFixed(2) : '—'}
-            hint="Soft suppression with residual floor"
-          />
-          <MetricPill
-            label="Top ROI"
-            value={
-              result ? ROI_LABELS[summaryTop(result)] : '—'
-            }
-            tone="teal"
-          />
+
+        <div className="cta-row" role="group" aria-label="Choose a video source">
+          <button
+            type="button"
+            className={`cta cta-primary ${inputMode === 'upload' ? 'is-active' : ''}`}
+            onClick={openUploadPicker}
+            disabled={busy}
+          >
+            Upload face video
+          </button>
+          <button
+            type="button"
+            className={`cta cta-secondary ${inputMode === 'synthetic' ? 'is-active' : ''}`}
+            onClick={() => handleInputMode('synthetic')}
+            disabled={busy}
+          >
+            Try sample
+          </button>
+          <button
+            type="button"
+            className={`cta cta-secondary ${inputMode === 'webcam' ? 'is-active' : ''}`}
+            onClick={() => handleInputMode('webcam')}
+            disabled={busy}
+          >
+            Use webcam
+          </button>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="video/mp4,video/webm,video/quicktime,video/*"
+          className="sr-only"
+          tabIndex={-1}
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void handleUpload(f)
+          }}
+        />
+
+        <div className="hero-live" aria-live="polite">
+          <div className="live-stat">
+            <div className="live-stat-label">Est. BPM</div>
+            <div className="live-stat-value">
+              {result ? result.estimatedBpm.toFixed(0) : '—'}
+            </div>
+          </div>
+          <div className="live-stat">
+            <div className="live-stat-label">Motion risk</div>
+            <div className="live-stat-value">
+              {result ? result.conflict.combined.toFixed(2) : '—'}
+            </div>
+          </div>
+          <div className="live-stat">
+            <div className="live-stat-label">Most trusted</div>
+            <div className="live-stat-value" style={{ fontSize: '1.15rem' }}>
+              {result ? ROI_LABELS[summaryTop(result)] : '—'}
+            </div>
+          </div>
         </div>
       </header>
 
@@ -343,71 +427,101 @@ export default function App() {
         </div>
       )}
 
-      <div className="layout">
-        <ControlsPanel
-          controls={controls}
-          onChange={setControls}
-          inputMode={inputMode}
-          onInputMode={handleInputMode}
-          onUpload={handleUpload}
-          status={status}
-          busy={busy}
-        />
+      <div
+        className={`status-bar ${busy ? 'is-busy' : ''}`}
+        role="status"
+      >
+        <span className="status-dot" aria-hidden />
+        <span>{status}</span>
+      </div>
 
+      {inputMode === 'upload' && (
+        <section className="upload-panel" aria-label="Upload face video">
+          <h2>Upload face video</h2>
+          <p className="tip">
+            Short clip of a face, good light. MP4, WebM, or MOV — about 5–20
+            seconds works well.
+          </p>
+          <label className="upload-label">
+            {busy ? 'Analyzing…' : uploadName ? 'Choose another video' : 'Choose video file'}
+            <input
+              type="file"
+              accept="video/mp4,video/webm,video/quicktime,video/*"
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void handleUpload(f)
+                e.target.value = ''
+              }}
+            />
+          </label>
+          {uploadName && !busy && (
+            <p className="upload-meta">Loaded: {uploadName}</p>
+          )}
+          <p className="help-line">
+            For research datasets, use local folders later; this demo uses one
+            video at a time.
+          </p>
+        </section>
+      )}
+
+      <div className="layout">
         <section className="panel">
           <header className="panel-head">
-            <h2>Motion · §3.1.2</h2>
+            <h2>How the face moved</h2>
             <p>
-              Scale-normalized landmark displacement — global rigid head motion
-              vs residual local (expression/talk).
+              Overall head motion versus smaller local movement (expressions,
+              talking).
             </p>
           </header>
-          {!result ? (
+          {!hasResult ? (
             <EmptyState
-              title="Waiting for landmarks"
-              body="Need at least ~16 frames. Use the bundled sample or start webcam/upload."
+              title="Waiting for enough frames"
+              body="Need about a second of face tracking. Try the sample, upload a clip, or hold still on webcam."
             />
           ) : (
             <>
-              <SignalChart
-                series={[
-                  {
-                    values: result.motion.global,
-                    color: '#0F4C4A',
-                    label: 'Global M_g',
-                  },
-                  {
-                    values: result.motion.local.forehead,
-                    color: '#3D9B94',
-                    label: 'Forehead local',
-                  },
-                  {
-                    values: result.motion.residual.lowerFace,
-                    color: '#C4784A',
-                    label: 'Lower-face residual',
-                  },
-                ]}
-              />
+              <div className="chart-frame">
+                <SignalChart
+                  series={[
+                    {
+                      values: result!.motion.global,
+                      color: '#0E6B6A',
+                      label: 'Overall motion',
+                    },
+                    {
+                      values: result!.motion.local.forehead,
+                      color: '#2EC4B6',
+                      label: 'Forehead',
+                    },
+                    {
+                      values: result!.motion.residual.lowerFace,
+                      color: '#C45C3E',
+                      label: 'Lower face',
+                    },
+                  ]}
+                />
+              </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <MetricPill
-                  label="Global mean"
-                  value={result.motion.globalMean.toFixed(4)}
+                  label="Overall"
+                  value={result!.motion.globalMean.toFixed(4)}
                 />
                 <MetricPill
                   label="Forehead"
-                  value={result.motion.localMean.forehead.toFixed(4)}
+                  value={result!.motion.localMean.forehead.toFixed(4)}
                 />
                 <MetricPill
-                  label="Cheeks avg"
+                  label="Cheeks"
                   value={(
-                    (result.motion.localMean.leftCheek +
-                      result.motion.localMean.rightCheek) /
+                    (result!.motion.localMean.leftCheek +
+                      result!.motion.localMean.rightCheek) /
                     2
                   ).toFixed(4)}
                 />
                 <MetricPill
-                  label="Lower residual"
-                  value={result.motion.residualMean.lowerFace.toFixed(4)}
+                  label="Lower face"
+                  value={result!.motion.residualMean.lowerFace.toFixed(4)}
                 />
               </div>
             </>
@@ -416,15 +530,17 @@ export default function App() {
 
         <section className="panel">
           <header className="panel-head">
-            <h2>Conflict · §3.1.3</h2>
+            <h2>Motion vs pulse risk</h2>
             <p>
-              Temporal correlation and spectral overlap between motion and{' '}
-              {controls.candidateMethod} candidate. High C means higher{' '}
-              <em>sync risk</em> — it does not prove motion caused the error.
+              Risk score when face motion lines up with the pulse estimate —
+              not proof that motion caused an error.
             </p>
           </header>
-          {!result ? (
-            <EmptyState title="No conflict scores yet" body="Load a sample first." />
+          {!hasResult ? (
+            <EmptyState
+              title="No risk score yet"
+              body="Load a sample or video first."
+            />
           ) : (
             <>
               <div
@@ -436,61 +552,67 @@ export default function App() {
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
                 <MetricPill
-                  label="C_temp"
-                  value={result.conflict.cTemp.toFixed(3)}
+                  label="Time sync"
+                  value={result!.conflict.cTemp.toFixed(3)}
                   tone="amber"
+                  hint="How similarly motion and pulse move over time"
                 />
                 <MetricPill
-                  label="C_spec"
-                  value={result.conflict.cSpec.toFixed(3)}
+                  label="Freq. overlap"
+                  value={result!.conflict.cSpec.toFixed(3)}
                   tone="amber"
+                  hint="Shared energy in the pulse frequency band"
                 />
                 <MetricPill
-                  label="C combined"
-                  value={result.conflict.combined.toFixed(3)}
+                  label="Combined risk"
+                  value={result!.conflict.combined.toFixed(3)}
                   tone="warn"
                 />
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
-                  <h3 className="mb-2 text-sm font-medium text-ink/70">
-                    Motion vs candidate overlay
+                  <h3 className="mb-2 text-sm font-medium text-ink-soft">
+                    Motion vs pulse estimate
                   </h3>
-                  <SignalChart
-                    series={[
-                      {
-                        values: result.motion.global.slice(
-                          -result.candidate.length,
-                        ),
-                        color: '#C4784A',
-                        label: 'Motion',
-                      },
-                      {
-                        values: result.candidate,
-                        color: '#0F4C4A',
-                        label: 'Candidate rPPG',
-                      },
-                    ]}
-                  />
+                  <div className="chart-frame">
+                    <SignalChart
+                      series={[
+                        {
+                          values: result!.motion.global.slice(
+                            -result!.candidate.length,
+                          ),
+                          color: '#C45C3E',
+                          label: 'Motion',
+                        },
+                        {
+                          values: result!.candidate,
+                          color: '#0E6B6A',
+                          label: 'Pulse estimate',
+                        },
+                      ]}
+                    />
+                  </div>
                 </div>
                 <div>
-                  <h3 className="mb-2 text-sm font-medium text-ink/70">
-                    Spectra (shared-band highlight)
+                  <h3 className="mb-2 text-sm font-medium text-ink-soft">
+                    Frequency view
                   </h3>
-                  <SpectrumChart
-                    freqs={result.spectra.candidate.freqs}
-                    power={result.spectra.candidate.power}
-                    bandHz={controls.physBandHz}
-                    color="#0F4C4A"
-                  />
-                  <SpectrumChart
-                    className="mt-2"
-                    freqs={result.spectra.motion.freqs}
-                    power={result.spectra.motion.power}
-                    bandHz={controls.physBandHz}
-                    color="#C4784A"
-                    height={72}
-                  />
+                  <div className="chart-frame">
+                    <SpectrumChart
+                      freqs={result!.spectra.candidate.freqs}
+                      power={result!.spectra.candidate.power}
+                      bandHz={controls.physBandHz}
+                      color="#0E6B6A"
+                    />
+                    <SpectrumChart
+                      className="mt-2"
+                      freqs={result!.spectra.motion.freqs}
+                      power={result!.spectra.motion.power}
+                      bandHz={controls.physBandHz}
+                      color="#C45C3E"
+                      height={72}
+                    />
+                  </div>
                 </div>
               </div>
             </>
@@ -499,59 +621,66 @@ export default function App() {
 
         <section className="panel">
           <header className="panel-head">
-            <h2>Soft suppression · residual path</h2>
+            <h2>Cleaned pulse estimate</h2>
             <p>
-              Gain = (1−C)·(1−floor)+floor. Pulse energy is never fully wiped —
-              the residual floor keeps a recoverable path.
+              When risk is high, the pulse waveform is gently dialed down — never
+              wiped out completely.
             </p>
           </header>
-          {!result ? (
-            <EmptyState title="No gated waveform" body="Run analysis first." />
+          {!hasResult ? (
+            <EmptyState
+              title="No cleaned waveform yet"
+              body="Run analysis with a sample, upload, or webcam."
+            />
           ) : (
             <>
-              <SignalChart
-                series={[
-                  {
-                    values: result.candidate,
-                    color: '#8AA6A3',
-                    label: 'Before',
-                  },
-                  {
-                    values: result.suppression.gated,
-                    color: '#0F4C4A',
-                    label: 'After gate',
-                  },
-                ]}
-              />
+              <div className="chart-frame">
+                <SignalChart
+                  series={[
+                    {
+                      values: result!.candidate,
+                      color: '#8AA6A3',
+                      label: 'Before cleanup',
+                    },
+                    {
+                      values: result!.suppression.gated,
+                      color: '#0E6B6A',
+                      label: 'After cleanup',
+                    },
+                  ]}
+                />
+              </div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <MetricPill
-                  label="Gain"
-                  value={result.suppression.gain.toFixed(3)}
+                  label="Cleanup strength"
+                  value={result!.suppression.gain.toFixed(3)}
                   tone="teal"
                 />
                 <MetricPill
-                  label="Floor"
-                  value={result.suppression.residualFloor.toFixed(2)}
+                  label="Floor kept"
+                  value={result!.suppression.residualFloor.toFixed(2)}
                 />
                 <MetricPill
                   label="BPM before"
-                  value={result.estimatedBpm.toFixed(0)}
+                  value={result!.estimatedBpm.toFixed(0)}
                 />
                 <MetricPill
                   label="BPM after"
-                  value={result.gatedBpm.toFixed(0)}
+                  value={result!.gatedBpm.toFixed(0)}
                   tone="teal"
                 />
               </div>
               <div className="mt-4">
-                <h3 className="mb-2 text-sm font-medium text-ink/70">
-                  Spectrum after gate
+                <h3 className="mb-2 text-sm font-medium text-ink-soft">
+                  Spectrum after cleanup
                 </h3>
-                <SpectrumChart
-                  freqs={result.spectra.gated.freqs}
-                  power={result.spectra.gated.power}
-                  bandHz={controls.physBandHz}
-                />
+                <div className="chart-frame">
+                  <SpectrumChart
+                    freqs={result!.spectra.gated.freqs}
+                    power={result!.spectra.gated.power}
+                    bandHz={controls.physBandHz}
+                  />
+                </div>
               </div>
             </>
           )}
@@ -559,31 +688,36 @@ export default function App() {
 
         <section className="panel">
           <header className="panel-head">
-            <h2>Regional reliability · §3.1.4</h2>
+            <h2>Which face areas to trust</h2>
             <p>
-              R_i = σ(λ (Q_i − M_i)); soft weights sum to 1. Prefer stable,
-              informative skin over high-motion lower face when talking.
+              Stable, informative skin regions get more weight — talking mouths
+              and shaky areas get less.
             </p>
           </header>
-          {!result ? (
-            <EmptyState title="No ROI weights" body="Need ROI RGB traces." />
+          {!hasResult ? (
+            <EmptyState
+              title="No trust map yet"
+              body="Need face color samples from a video or the sample."
+            />
           ) : (
             <div className="grid gap-6 md:grid-cols-2">
               <FaceOverlay
                 landmarks={lastLandmarks}
-                weights={result.reliability.weights}
+                weights={result!.reliability.weights}
               />
               <div>
-                <SignalChart
-                  height={100}
-                  series={[
-                    {
-                      values: result.aggregated,
-                      color: '#0F4C4A',
-                      label: 'Reliability-weighted aggregate',
-                    },
-                  ]}
-                />
+                <div className="chart-frame">
+                  <SignalChart
+                    height={100}
+                    series={[
+                      {
+                        values: result!.aggregated,
+                        color: '#0E6B6A',
+                        label: 'Trust-weighted pulse',
+                      },
+                    ]}
+                  />
+                </div>
                 <div className="mt-4 space-y-2">
                   {ROI_IDS.map((id) => (
                     <div
@@ -593,39 +727,46 @@ export default function App() {
                       <span className="font-medium text-ink/80">
                         {ROI_LABELS[id]}
                       </span>
-                      <span className="tabular-nums text-ink/50">
-                        Q {result.reliability.quality[id]!.toFixed(2)}
+                      <span className="tabular-nums text-ink-soft">
+                        Quality {result!.reliability.quality[id]!.toFixed(2)}
                       </span>
-                      <span className="tabular-nums text-ink/50">
-                        M {result.reliability.motion[id]!.toFixed(2)}
+                      <span className="tabular-nums text-ink-soft">
+                        Motion {result!.reliability.motion[id]!.toFixed(2)}
                       </span>
-                      <span className="tabular-nums text-teal-ink">
-                        R {result.reliability.reliability[id]!.toFixed(2)}
+                      <span className="tabular-nums text-sea-deep">
+                        Trust {result!.reliability.reliability[id]!.toFixed(2)}
                       </span>
                     </div>
                   ))}
                 </div>
-                <p className="mt-4 text-sm text-ink/55">
-                  Weight entropy:{' '}
+                <p className="mt-4 text-sm text-ink-soft">
+                  Focus score:{' '}
                   <span className="tabular-nums text-ink/80">
-                    {result.reliability.entropy.toFixed(2)} bits
+                    {result!.reliability.entropy.toFixed(2)}
                   </span>{' '}
-                  (lower = more peaked on few ROIs).
+                  (lower means trust is concentrated on fewer areas).
                 </p>
               </div>
             </div>
           )}
         </section>
+
+        <ControlsPanel
+          controls={controls}
+          onChange={setControls}
+          inputMode={inputMode}
+          onInputMode={handleInputMode}
+          busy={busy}
+        />
       </div>
 
       <footer className="site-foot">
         <p>
-          Classical CHROM/POS candidate · MediaPipe Face Landmarker · thesis
-          mechanisms visualized for learning. Not a medical device.
+          Browser demo for learning — not a medical device. Camera and upload
+          need a one-time model download.
         </p>
       </footer>
 
-      {/* Hidden media elements for upload/webcam sampling */}
       <video ref={videoRef} className="hidden" playsInline muted />
       <canvas ref={canvasRef} className="hidden" />
     </div>
@@ -646,9 +787,9 @@ function summaryTop(result: PipelineResult) {
 
 function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-ink/20 bg-ink/[0.03] px-4 py-8 text-center">
-      <p className="font-medium text-ink/70">{title}</p>
-      <p className="mt-1 text-sm text-ink/45">{body}</p>
+    <div className="empty-state">
+      <p>{title}</p>
+      <p>{body}</p>
     </div>
   )
 }

@@ -125,31 +125,31 @@ export function conflictRiskLabel(c: number): {
   if (c < 0.25) {
     return {
       level: 'low',
-      label: 'Low sync risk',
+      label: 'Low risk',
       blurb:
-        'Motion and candidate rPPG are weakly aligned in time/frequency. Graded risk only — not proof of clean pulse.',
+        'Face motion and the pulse estimate barely line up. That is a good sign — not a guarantee the pulse is perfect.',
     }
   }
   if (c < 0.5) {
     return {
       level: 'moderate',
-      label: 'Moderate sync risk',
+      label: 'Moderate risk',
       blurb:
-        'Partial temporal or spectral overlap. Treat as elevated uncertainty, not a causal motion→error claim.',
+        'Some overlap between motion and the pulse estimate. Treat the BPM with a bit more caution.',
     }
   }
   if (c < 0.75) {
     return {
       level: 'elevated',
-      label: 'Elevated sync risk',
+      label: 'Elevated risk',
       blurb:
-        'Strong co-movement or shared-band energy. Soft suppression engages; residual path keeps a pulse floor.',
+        'Motion and pulse look closely related. Cleanup dials the estimate down but keeps a recoverable floor.',
     }
   }
   return {
     level: 'high',
-    label: 'High sync risk',
+    label: 'High risk',
     blurb:
-      'Motion and candidate look highly synchronized in the phys band. High graded risk — still not causality.',
+      'Motion and the pulse estimate move together a lot. High risk score only — not proof that motion caused the error.',
   }
 }

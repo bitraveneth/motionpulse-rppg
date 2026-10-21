@@ -3,10 +3,10 @@ import { ROI_IDS, ROI_LABELS } from '../lib/rppg/types'
 import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
 
 const ROI_COLORS: Record<RoiId, string> = {
-  forehead: '#0F4C4A',
-  leftCheek: '#2A7A75',
-  rightCheek: '#3D9B94',
-  lowerFace: '#C4784A',
+  forehead: '#0E6B6A',
+  leftCheek: '#1A8F8A',
+  rightCheek: '#2EC4B6',
+  lowerFace: '#C45C3E',
 }
 
 type Props = {
@@ -33,9 +33,9 @@ export function FaceOverlay({ landmarks, weights, className = '' }: Props) {
     <div className={className}>
       <svg
         viewBox={`0 0 ${w} ${h}`}
-        className="h-auto w-full rounded-xl bg-gradient-to-b from-[#d9ebe8] to-[#eef4f1]"
+        className="h-auto w-full rounded-xl bg-gradient-to-b from-[#d9e8f0] to-[#eef4f7]"
         role="img"
-        aria-label="Face ROI reliability overlay"
+        aria-label="Which face areas to trust"
       >
         {ROI_IDS.map((roi) => {
           const idxs = ROI_LANDMARK_INDICES[roi]

@@ -1,13 +1,8 @@
-# MotionPulse — Motion-Aware rPPG Demo
+# MotionPulse
 
-Interactive browser demo of the four thesis mechanisms from *Remote Photoplethysmography via Motion-Aware Physiological Representation Learning* (§§3.1.2–3.1.4):
+Estimate pulse from a face video in the browser. See when face motion may muddy the signal, and which face areas look most trustworthy.
 
-1. **Global / local facial motion** — scale-normalized landmark displacement; rigid vs residual local motion  
-2. **Temporal + spectral conflict** — graded sync risk (`C_temp`, `C_spec`, combined `C`) — **not causality**  
-3. **Bounded soft suppression** — soft gate with residual floor so pulse is never fully wiped  
-4. **Regional reliability weights** — forehead / L·R cheek / lower face via `σ(λ(Q−M))`
-
-Classical **CHROM / POS** candidate rPPG (no PhysNet). **MediaPipe Face Landmarker** for upload/webcam. A **bundled synthetic sample** runs everything without datasets.
+**Main job:** Load sample → Upload video → Use webcam → read pulse BPM, motion risk, and a trust map.
 
 ## Run locally
 
@@ -16,36 +11,43 @@ npm install
 npm run dev
 ```
 
-Dev server binds to **http://127.0.0.1:4731** (see `vite.config.ts`).
+Dev server: **http://127.0.0.1:4731**
 
 ```bash
-npm test      # unit tests (synthetic conflict / reliability cases)
+npm test
 npm run build
 ```
 
-## Dataset download / request links
+## How to upload a video
 
-The demo does **not** require these. Request them in parallel for later research:
+1. Open the app and click **Upload face video**.
+2. Pick a short clip (MP4 / WebM / MOV) of a face in good light — about 5–20 seconds.
+3. Wait while landmarks are sampled; the status bar shows progress.
+4. Results panels update automatically: motion, risk score, cleaned pulse, and trust map.
+
+For research datasets (PURE / UBFC / etc.), use local folders later; this demo analyzes **one video at a time**.
+
+## What the panels mean
+
+| Panel | Plain meaning |
+|-------|----------------|
+| How the face moved | Overall head motion vs local expression/talk |
+| Motion vs pulse risk | Risk score when motion lines up with the pulse estimate — **not proof** |
+| Cleaned pulse estimate | Soft cleanup when risk is high; pulse is never fully wiped |
+| Which face areas to trust | Stable skin regions get more weight |
+
+## Dataset links (optional, later)
 
 | Dataset | Access |
 |---------|--------|
-| **UBFC-rPPG** | [Official page](https://sites.google.com/view/ybenezeth/ubfcrppg) (~42 subjects + PPG GT) — usually the fastest start |
-| **PURE** | Email `nikr-datasets-request@tu-ilmenau.de` from the [TU Ilmenau PURE page](https://www.tu-ilmenau.de/en/university/departments/department-of-computer-science-and-automation/profile/institutes-and-groups/institute-of-computer-and-systems-engineering/group-for-neuroinformatics-and-cognitive-robotics/data-sets-code/pulse-rate-detection-dataset-pure) — controlled motion protocols |
-| **MMPD** | Sign the [release agreement](https://github.com/McJackTang/MMPD_rPPG_dataset/blob/main/MMPD_Release_Agreement.pdf); faculty email to `tjk24@mails.tsinghua.edu.cn` (cc `yuntaowang@tsinghua.edu.cn`) |
+| **UBFC-rPPG** | [Official page](https://sites.google.com/view/ybenezeth/ubfcrppg) |
+| **PURE** | [TU Ilmenau PURE](https://www.tu-ilmenau.de/en/university/departments/department-of-computer-science-and-automation/profile/institutes-and-groups/institute-of-computer-and-systems-engineering/group-for-neuroinformatics-and-cognitive-robotics/data-sets-code/pulse-rate-detection-dataset-pure) |
+| **MMPD** | [Release agreement](https://github.com/McJackTang/MMPD_rPPG_dataset/blob/main/MMPD_Release_Agreement.pdf) |
 
-Drop real clips into `samples/` later and reuse the same pipeline. Training baselines: [rPPG-Toolbox](https://github.com/ubicomplab/rPPG-Toolbox).
-
-## Project layout
-
-```
-src/lib/rppg/          # Pure TS: motion, CHROM/POS, conflict, reliability, synthetic
-src/lib/mediapipe/     # Face Landmarker for upload / webcam
-src/components/        # Charts, face overlay, controls
-src/App.tsx            # Interactive panels
-```
+Training baselines: [rPPG-Toolbox](https://github.com/ubicomplab/rPPG-Toolbox).
 
 ## Notes
 
-- Conflict UI labels scores as **graded risk**, never causal claims.  
-- Not a medical device.  
-- Webcam/upload need network once to fetch the MediaPipe model/WASM.
+- Classical CHROM / POS candidate; MediaPipe Face Landmarker for upload/webcam.
+- Bundled synthetic sample works offline.
+- Not a medical device.
