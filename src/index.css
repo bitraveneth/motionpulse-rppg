@@ -156,6 +156,8 @@
 
   .monitor-cta-bar .cta {
     backdrop-filter: blur(8px);
+    font-size: 0.78rem;
+    padding: 0.45rem 0.7rem;
   }
 
   .monitor-cta-bar .cta-secondary {
@@ -334,6 +336,85 @@
 
   .vitals-trust {
     margin-top: 0.45rem;
+  }
+
+  .vitals-trust-block {
+    margin-top: 0.65rem;
+  }
+
+  .vitals-trust-title {
+    margin: 0 0 0.35rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .trust-pct {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .trust-pct li {
+    display: grid;
+    grid-template-columns: 4.5rem 1fr 2.4rem;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.75rem;
+  }
+
+  .trust-pct-label {
+    font-weight: 600;
+    color: var(--color-ink-soft);
+  }
+
+  .trust-pct-value {
+    text-align: right;
+    font-weight: 700;
+    color: var(--color-sea-deep);
+  }
+
+  .vitals-live .vitals-chart {
+    outline: 1px dashed color-mix(in oklab, var(--color-mint) 55%, transparent);
+    outline-offset: 2px;
+  }
+
+  .vitals-live-pill,
+  .risk-chip.risk-live {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.35rem;
+    color: var(--color-sea-deep);
+    background: color-mix(in oklab, var(--color-mint) 28%, white);
+    animation: vitals-pulse-soft 1.4s ease-in-out infinite;
+  }
+
+  .vitals-value.is-live {
+    color: var(--color-sea-deep);
+    transition: color 0.25s ease;
+  }
+
+  .vitals-motion-note {
+    margin: 0.75rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--color-ink-soft);
+  }
+
+  @keyframes vitals-pulse-soft {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.72;
+    }
   }
 
   .vitals-readout header {

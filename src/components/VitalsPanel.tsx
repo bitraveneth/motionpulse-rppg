@@ -16,6 +16,8 @@ type Props = {
   scrub: number
   /** When browsing a queued/analyzing clip with no result yet */
   emptyHint?: string
+  /** True while frames are still accumulating — show live estimates */
+  liveEstimating?: boolean
 }
 
 /** Vital signs + heart-beat chart — honest about what rPPG can and cannot do. */
@@ -25,6 +27,7 @@ export function VitalsPanel({
   sparkline,
   scrub,
   emptyHint,
+  liveEstimating = false,
 }: Props) {
   if (!result) {
     return (
@@ -53,8 +56,8 @@ export function VitalsPanel({
           </div>
         </div>
         <p className="vitals-edu">
-          rPPG reads tiny skin-color changes from blood volume under the face —
-          then estimates pulse. Blood pressure needs more than a face video.
+          Pulse comes from tiny skin-color changes in the face video. Blood
+          pressure is not estimated here.
         </p>
       </section>
     )
@@ -71,12 +74,20 @@ export function VitalsPanel({
       : result.candidate
 
   return (
-    <section className="vitals-panel" aria-label="Vital signs">
+    <section
+      className={`vitals-panel ${liveEstimating ? 'vitals-live' : ''}`}
+      aria-label="Vital signs"
+      aria-busy={liveEstimating}
+    >
       <div className="vitals-grid">
         <div className="vitals-chart-col">
           <header className="vitals-chart-head">
             <h2>Heart beat chart</h2>
-            <ReliabilityBadge remark={remark} showHeadline />
+            {liveEstimating ? (
+              <span className="vitals-live-pill">Updating…</span>
+            ) : (
+              <ReliabilityBadge remark={remark} showHeadline />
+            )}
           </header>
           <div className="chart-frame vitals-chart">
             <SignalChart
@@ -96,26 +107,42 @@ export function VitalsPanel({
             className="vitals-spark"
             label="Compact pulse"
           />
-          <TrustDots weights={weights} variant="dots" className="vitals-trust" />
+          <div className="vitals-trust-block">
+            <h3 className="vitals-trust-title">Region trust</h3>
+            <TrustDots
+              weights={weights}
+              variant="pct"
+              className="vitals-trust"
+            />
+          </div>
         </div>
 
         <div className="vitals-readout">
           <header>
             <h2>Vital signs</h2>
-            <p className={`risk-chip risk-${risk.level}`}>
-              {risk.label} · {result.conflict.combined.toFixed(2)}
-            </p>
+            {liveEstimating ? (
+              <p className="risk-chip risk-live">Live estimate · rolling window</p>
+            ) : (
+              <p className={`risk-chip risk-${risk.level}`}>
+                {risk.label} · {result.conflict.combined.toFixed(2)}
+              </p>
+            )}
           </header>
 
           <div className="vitals-metrics">
             <div className="vital-metric vital-metric-primary">
               <span className="vitals-label">Heart rate</span>
-              <span className="vitals-value" data-animate="bpm">
+              <span
+                className={`vitals-value ${liveEstimating ? 'is-live' : ''}`}
+                data-animate="bpm"
+              >
                 {result.gatedBpm.toFixed(0)}
               </span>
               <span className="vitals-unit">BPM</span>
               <span className="vitals-note">
-                From cleaned rPPG · raw {result.estimatedBpm.toFixed(0)}
+                {liveEstimating
+                  ? `Rolling · ${result.windowSamples} samples`
+                  : `Settled · raw ${result.estimatedBpm.toFixed(0)}`}
               </span>
               <span className="result-pulse-ring" aria-hidden />
             </div>
@@ -129,7 +156,7 @@ export function VitalsPanel({
                   </span>
                   <span className="vitals-unit">/min</span>
                   <span className="vitals-note">
-                    Experimental — low-band residual, not clinical
+                    Experimental — not clinical
                   </span>
                 </>
               ) : (
@@ -147,17 +174,16 @@ export function VitalsPanel({
               <span className="vitals-label">Blood pressure</span>
               <span className="vitals-value vitals-value-sm">Not available</span>
               <span className="vitals-note">
-                Not estimated from rPPG alone — research only, no fake BP
+                Not estimated from rPPG alone
               </span>
             </div>
           </div>
 
-          <p className="vitals-edu">
-            <strong>What is rPPG?</strong> Remote photoplethysmography senses
-            subtle color shifts in facial skin as blood volume pulses — face →
-            skin ROI → pulse signal → heart rate. Educational demo, not a
-            medical device.
-          </p>
+          {!liveEstimating && (
+            <p className="vitals-motion-note" role="status">
+              {remark.headline}
+            </p>
+          )}
         </div>
       </div>
     </section>

@@ -3,8 +3,8 @@ import type { RoiWeightsSummary } from '../lib/feed/types'
 
 type Props = {
   weights: RoiWeightsSummary
-  /** Compact dots (feed) vs short bars (story) */
-  variant?: 'dots' | 'bars'
+  /** Compact dots (feed), short bars (story), or % readout (vitals) */
+  variant?: 'dots' | 'bars' | 'pct'
   className?: string
 }
 
@@ -21,6 +21,29 @@ export function TrustDots({
   variant = 'dots',
   className = '',
 }: Props) {
+  if (variant === 'pct') {
+    return (
+      <ul className={`trust-pct ${className}`} aria-label="Region trust">
+        {ROI_IDS.map((id) => {
+          const w = weights[id] ?? 0
+          const pct = Math.round(w * 100)
+          return (
+            <li key={id}>
+              <span className="trust-pct-label">{SHORT[id]}</span>
+              <span className="trust-bar-track" aria-hidden>
+                <span
+                  className="trust-bar-fill"
+                  style={{ width: `${pct}%` }}
+                />
+              </span>
+              <span className="trust-pct-value tabular-nums">{pct}%</span>
+            </li>
+          )
+        })}
+      </ul>
+    )
+  }
+
   if (variant === 'bars') {
     return (
       <ul className={`trust-mini-bars ${className}`} aria-label="Region trust">

@@ -2,7 +2,7 @@
 
 Estimate pulse from a face video in the browser. See when face motion may muddy the signal, and which face areas look most trustworthy.
 
-**Main job:** Load sample → Upload video → Use webcam → read pulse BPM, motion risk, and a trust map. Optionally share **metric summaries** (+ tiny face thumb + pulse sparkline) to a public feed.
+**Main job:** Face monitoring — upload up to 10 clips (or load a demo set), watch vitals update live while analyzing, then settle on HR / waveform / trust / risk. Optionally share **metric summaries** (+ tiny face thumb + pulse sparkline) to a public feed. Blood pressure stays **Not available**.
 
 ## Run locally
 
@@ -18,12 +18,20 @@ npm test
 npm run build
 ```
 
+## Demo clips (5–10 face videos)
+
+1. Drop short face videos into [`public/demo-clips/`](public/demo-clips/) (`.mp4` / `.webm` / `.mov`).
+2. Restart or refresh `npm run dev`, then click **Load demo set**.
+3. Browse one-by-one with the session slider under the preview.
+
+Until that folder has files, use **Upload face video** (multi-select) or **Try sample**.
+
 ## Upload flow
 
-1. Click **Upload face video** and pick a short clip (MP4 / WebM / MOV).
+1. Click **Upload face video** and pick one or more short clips (MP4 / WebM / MOV), up to 10 per session.
 2. The browser **optimizes** first: caps resolution (~720p) and duration (~15s) via canvas — no video leaves the device.
-3. Progress stages: **Optimizing → Finding face → Estimating pulse**.
-4. A **result story** card summarizes BPM, motion risk / reliability badge, trust dots, pulse sparkline, and an optional face thumbnail. Detail panels expand below.
+3. Progress stages: **Optimizing → Finding face → Estimating pulse** — HR, waveform, and risk update **progressively** as frames accumulate, then settle when done.
+4. Use the **session slider** to flip between clips. Detail panels (motion / spectrum / trust) stay under Advanced.
 5. Optionally **Share to feed** (nickname blank → Anonymous). Only metrics + optional tiny thumb/sparkline are posted — never raw face video.
 
 ## How to read your results

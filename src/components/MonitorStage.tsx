@@ -17,6 +17,9 @@ type Props = {
   onUploadClick: () => void
   onWebcam: () => void
   onSample: () => void
+  onLoadDemoSet?: () => void
+  /** True while demo-clip discovery / fetch is in flight */
+  demoLoading?: boolean
   status: string
 }
 
@@ -34,6 +37,8 @@ export function MonitorStage({
   onUploadClick,
   onWebcam,
   onSample,
+  onLoadDemoSet,
+  demoLoading = false,
   status,
 }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -176,10 +181,21 @@ export function MonitorStage({
             type="button"
             className={`cta cta-secondary ${inputMode === 'synthetic' ? 'is-active' : ''}`}
             onClick={onSample}
-            disabled={busy}
+            disabled={busy || demoLoading}
           >
             Try sample
           </button>
+          {onLoadDemoSet && (
+            <button
+              type="button"
+              className="cta cta-secondary"
+              onClick={onLoadDemoSet}
+              disabled={busy || demoLoading}
+              title="Load all mp4/webm/mov from public/demo-clips (up to 10)"
+            >
+              {demoLoading ? 'Loading demos…' : 'Load demo set'}
+            </button>
+          )}
         </div>
       </div>
 

@@ -20,12 +20,15 @@ import {
   detectVideoFrame,
   getFaceLandmarker,
   sampleRoiRgbFromFrame,
-  sampleVideoLandmarks,
 } from './lib/mediapipe/faceLandmarker'
 import {
   buildSparklinePath,
   captureFaceThumbnail,
 } from './lib/feed/cardMedia'
+import {
+  fetchDemoClipList,
+  fetchDemoClipsAsFiles,
+} from './lib/demo/listDemoClips'
 import { ROI_LANDMARK_INDICES } from './lib/rppg/motion'
 import { runPipeline, type PipelineResult } from './lib/rppg/pipeline'
 import { conflictRiskLabel } from './lib/rppg/conflict'
@@ -40,6 +43,7 @@ import {
   type RoiRgbTrace,
 } from './lib/rppg/types'
 import { optimizeVideoFile } from './lib/video/optimize'
+import { streamAnalyzeVideo } from './lib/video/streamAnalyze'
 import type { RunSource } from './lib/feed/types'
 
 type LiveBuffer = {
@@ -91,6 +95,9 @@ export default function App() {
   const [sessionRuns, setSessionRuns] = useState<SessionRun[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [queueLeft, setQueueLeft] = useState(0)
+  const [demoLoading, setDemoLoading] = useState(false)
+  /** True while upload analysis is still accumulating frames (live vitals). */
+  const [liveEstimating, setLiveEstimating] = useState(false)
   const labEnabled = isLocalLabEnabled()
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -321,6 +328,7 @@ export default function App() {
 
     if (clip.status === 'queued') {
       setLive(null)
+      setLiveEstimating(false)
       setShowStory(false)
       setStage('idle')
       setStageDetail(undefined)
@@ -340,7 +348,17 @@ export default function App() {
       setStageDetail('Analyzing this clip…')
       setUploadName(clip.name)
       setInputMode('upload')
-      setStatus(`Analyzing “${clip.name}”…`)
+      setLiveEstimating(true)
+      if (clip.buffer) {
+        setLive(clip.buffer)
+        setDurationSec(clip.durationSec || 0)
+        setScrub(1)
+      }
+      if (clip.objectUrl) {
+        objectUrlRef.current = clip.objectUrl
+        await attachVideoUrl(clip.objectUrl, 0.5)
+      }
+      setStatus(`Analyzing “${clip.name}” — vitals update live…`)
       return
     }
 
@@ -368,6 +386,7 @@ export default function App() {
     setDurationSec(clip.durationSec)
     setScrub(0.5)
     setBusy(false)
+    setLiveEstimating(false)
 
     if (clip.source === 'sample') {
       setInputMode('synthetic')
@@ -458,6 +477,7 @@ export default function App() {
       setUploadName('Sample')
       setShowStory(true)
       setHasVideo(false)
+      setLiveEstimating(false)
       setDurationSec(12)
       setLive({
         frames: synthetic.frames,
@@ -492,6 +512,34 @@ export default function App() {
     setStage('idle')
     setStatus('Choose one or more short face videos to analyze.')
     requestAnimationFrame(() => fileInputRef.current?.click())
+  }
+
+  async function loadDemoSet() {
+    setError(null)
+    setDemoLoading(true)
+    setStatus('Looking for clips in public/demo-clips…')
+    try {
+      const refs = await fetchDemoClipList()
+      if (refs.length === 0) {
+        setStatus(
+          'No demo clips yet — drop 5–10 face mp4/webm/mov into public/demo-clips/, then click Load demo set again.',
+        )
+        return
+      }
+      setStatus(`Fetching ${refs.length} demo clip${refs.length === 1 ? '' : 's'}…`)
+      const files = await fetchDemoClipsAsFiles(refs)
+      if (files.length === 0) {
+        setError('Could not download demo clips from /demo-clips/.')
+        setStatus('Demo set failed — check that the files are readable.')
+        return
+      }
+      await enqueueFiles(files)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load demo set')
+      setStatus('Demo set failed — try Upload or Try sample instead.')
+    } finally {
+      setDemoLoading(false)
+    }
   }
 
   function maybeCaptureThumb(
@@ -538,6 +586,7 @@ export default function App() {
       setStage('estimating_pulse')
       setStageDetail('Keep your face centered')
       setStatus('Camera on — keep your face centered. Results update as frames collect.')
+      setLiveEstimating(true)
       setBusy(false)
 
       const tick = async (ts: number) => {
@@ -582,7 +631,8 @@ export default function App() {
                   ].slice(-180)
                 }
                 if (frames.length >= 16) {
-                  setStage('done')
+                  setStage('estimating_pulse')
+                  setLiveEstimating(true)
                   setShowStory(true)
                   maybeCaptureThumb(canvas, landmarks)
                   setDurationSec(frames.length / 15)
@@ -704,77 +754,75 @@ export default function App() {
       }
       setStatus('Finding the face in your video…')
       await getFaceLandmarker()
-      const detected = await sampleVideoLandmarks(video, 12, (pct) => {
-        setStageDetail(`Reading landmarks… ${Math.round(pct * 100)}%`)
-        if (activeSessionIdRef.current === clipId) {
-          setStatus(`Reading face landmarks… ${Math.round(pct * 100)}%`)
-        }
-      })
-
-      if (detected.length < 16) {
-        throw new Error(
-          'Not enough face frames found. Try a clearer, well-lit clip of a face.',
-        )
-      }
-
       setStage('estimating_pulse')
-      setStageDetail('Sampling skin color and motion…')
+      setStageDetail('Streaming face + pulse windows…')
+      setLiveEstimating(true)
       if (activeSessionIdRef.current === clipId) {
-        setStatus('Estimating pulse from trusted face regions…')
+        setStatus('Analyzing — vitals update as frames accumulate…')
+        setShowStory(false)
+        setLive({
+          frames: [],
+          roiRgb: emptyRoiRgb(),
+          sampleRateHz: 12,
+        })
       }
 
       const canvas = canvasRef.current!
-      const ctx = canvas.getContext('2d')!
-      const roiRgb = emptyRoiRgb()
-      const frames: FrameLandmarks[] = []
-
-      for (const d of detected) {
-        video.currentTime = d.timestampMs / 1000
-        await new Promise<void>((r) => {
-          video!.onseeked = () => r()
-        })
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        ctx.drawImage(video, 0, 0)
-        frames.push(d.landmarks)
-        for (const id of ROI_IDS) {
-          roiRgb[id].push(
-            sampleRoiRgbFromFrame(
-              ctx,
-              canvas.width,
-              canvas.height,
-              d.landmarks,
-              ROI_LANDMARK_INDICES[id],
-            ),
+      const buffer = await streamAnalyzeVideo(video, canvas, {
+        targetFps: 12,
+        minFrames: 16,
+        updateEvery: 4,
+        onProgress: (pct) => {
+          setStageDetail(`Reading clip… ${Math.round(pct * 100)}%`)
+        },
+        onPartial: (partial, meta) => {
+          if (activeSessionIdRef.current !== clipId) return
+          setLive(partial)
+          setScrub(1)
+          setDurationSec(durationSec)
+          setStatus(
+            `Live estimate — ${meta.frameCount} frames (${Math.round(meta.pct * 100)}%)…`,
           )
-        }
-      }
+          // Light session patch so browsing mid-queue can peek at partials.
+          patchSessionRun(clipId, {
+            status: 'analyzing',
+            buffer: partial,
+            durationSec,
+            objectUrl: url,
+            bpm: (() => {
+              try {
+                return runPipeline({
+                  frames: partial.frames,
+                  roiRgb: partial.roiRgb,
+                  sampleRateHz: partial.sampleRateHz,
+                  controls,
+                }).gatedBpm
+              } catch {
+                return null
+              }
+            })(),
+          })
+        },
+      })
 
-      const fps =
-        detected.length > 1
-          ? 1000 /
-            ((detected[detected.length - 1]!.timestampMs -
-              detected[0]!.timestampMs) /
-              (detected.length - 1))
-          : 12
-
-      const mid = detected[Math.floor(detected.length / 2)]!
-      video.currentTime = mid.timestampMs / 1000
+      const fps = buffer.sampleRateHz
+      const midIdx = Math.floor(buffer.frames.length / 2)
+      const midLm = buffer.frames[midIdx]!
+      video.currentTime = (midIdx / Math.max(1, buffer.frames.length - 1)) * durationSec
       await new Promise<void>((r) => {
         video!.onseeked = () => r()
       })
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
-      ctx.drawImage(video, 0, 0)
-      maybeCaptureThumb(canvas, mid.landmarks)
-
-      const buffer: LiveBuffer = { frames, roiRgb, sampleRateHz: fps }
+      const ctx = canvas.getContext('2d')
+      if (ctx) ctx.drawImage(video, 0, 0)
+      maybeCaptureThumb(canvas, midLm)
 
       let pipeline: PipelineResult | null = null
       try {
         pipeline = runPipeline({
-          frames,
-          roiRgb,
+          frames: buffer.frames,
+          roiRgb: buffer.roiRgb,
           sampleRateHz: fps,
           controls,
         })
@@ -784,13 +832,14 @@ export default function App() {
 
       const thumb =
         canvas.width > 0
-          ? captureFaceThumbnail(canvas, mid.landmarks, {
+          ? captureFaceThumbnail(canvas, midLm, {
               blurPx: 0.9,
               sizePx: 160,
               quality: 0.7,
             })
           : null
 
+      setLiveEstimating(false)
       if (activeSessionIdRef.current === clipId) {
         setLive(buffer)
         setScrub(0.5)
@@ -804,7 +853,7 @@ export default function App() {
         objectUrlRef.current = url
         await attachVideoUrl(url, 0.5)
         setStatus(
-          `Done — ${frames.length} frames from “${file.name}”. Scrub or use the session slider.`,
+          `Done — ${buffer.frames.length} frames from “${file.name}”. Scrub or use the session slider.`,
         )
       }
       if (!pipeline) {
@@ -828,6 +877,7 @@ export default function App() {
       setError(message)
       setStatus('Upload failed — try another clip, or load the sample.')
       setLive(null)
+      setLiveEstimating(false)
       setStage('idle')
       setShowStory(false)
       setHasVideo(false)
@@ -845,6 +895,7 @@ export default function App() {
       return null
     } finally {
       setBusy(false)
+      setLiveEstimating(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
@@ -973,10 +1024,10 @@ export default function App() {
   const activeClip =
     sessionRuns.find((r) => r.id === activeSessionId) ?? null
   const vitalsEmptyHint =
-    activeClip?.status === 'analyzing'
-      ? `Analyzing “${activeClip.name}”…`
+    activeClip?.status === 'analyzing' && !result
+      ? `Analyzing “${activeClip.name}” — first estimate in a moment…`
       : activeClip?.status === 'queued'
-        ? `“${activeClip.name}” is queued — vitals appear when it finishes.`
+        ? `“${activeClip.name}” is queued — vitals appear when analysis starts.`
         : activeClip?.status === 'error'
           ? `Could not analyze “${activeClip.name}”.`
           : undefined
@@ -1031,11 +1082,9 @@ export default function App() {
             <h1 className="brand">
               Motion<span>Pulse</span>
             </h1>
-            <p className="headline">Face video → pulse you can see</p>
             <p className="tagline">
-              Large preview with live face detection. Upload up to 10 face clips
-              and browse them one by one with the session slider — honest vitals
-              per clip, never fake blood pressure.
+              Face monitoring — live heart rate from video. Upload clips, load
+              a demo set, or try the sample.
             </p>
           </header>
 
@@ -1081,6 +1130,8 @@ export default function App() {
               onUploadClick={openUploadPicker}
               onWebcam={() => void handleInputMode('webcam')}
               onSample={() => void handleInputMode('synthetic')}
+              onLoadDemoSet={() => void loadDemoSet()}
+              demoLoading={demoLoading}
               status={status}
             />
 
@@ -1090,6 +1141,10 @@ export default function App() {
               sparkline={sparkline}
               scrub={scrub}
               emptyHint={vitalsEmptyHint}
+              liveEstimating={
+                liveEstimating ||
+                (busy && stage === 'estimating_pulse' && Boolean(result))
+              }
             />
           </div>
 
