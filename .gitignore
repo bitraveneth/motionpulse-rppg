@@ -28,8 +28,10 @@ dist-ssr
 data/
 datasets/
 samples/real/
+out/
 *.avi
 *.mp4
 !public/**/*.mp4
 .env
 .env.*
+!.env.example

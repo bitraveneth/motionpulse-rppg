@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { AnalysisProgress, type AnalysisStage } from './components/AnalysisProgress'
 import { ControlsPanel, type InputMode } from './components/ControlsPanel'
 import { FaceOverlay } from './components/FaceOverlay'
 import { MetricPill } from './components/MetricPill'
+import { RecentRuns } from './components/RecentRuns'
+import { ResultStory } from './components/ResultStory'
+import { ShareToFeed } from './components/ShareToFeed'
 import { SignalChart, SpectrumChart } from './components/SignalChart'
 import {
   detectVideoFrame,
@@ -21,6 +25,8 @@ import {
   type FrameLandmarks,
   type RoiRgbTrace,
 } from './lib/rppg/types'
+import { optimizeVideoFile } from './lib/video/optimize'
+import type { RunSource } from './lib/feed/types'
 
 type LiveBuffer = {
   frames: FrameLandmarks[]
@@ -37,6 +43,12 @@ function emptyRoiRgb(): RoiRgbTrace {
   }
 }
 
+function modeToSource(mode: InputMode): RunSource {
+  if (mode === 'webcam') return 'webcam'
+  if (mode === 'upload') return 'upload'
+  return 'sample'
+}
+
 export default function App() {
   const [controls, setControls] = useState<DemoControls>(DEFAULT_CONTROLS)
   const [inputMode, setInputMode] = useState<InputMode>('synthetic')
@@ -47,6 +59,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [live, setLive] = useState<LiveBuffer | null>(null)
   const [uploadName, setUploadName] = useState<string | null>(null)
+  const [stage, setStage] = useState<AnalysisStage>('idle')
+  const [stageDetail, setStageDetail] = useState<string | undefined>()
+  const [feedTick, setFeedTick] = useState(0)
+  const [showStory, setShowStory] = useState(true)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -87,8 +103,8 @@ export default function App() {
       })
     } catch (e) {
       console.error(e)
-      return null
     }
+    return null
   }, [source, controls])
 
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
@@ -111,9 +127,12 @@ export default function App() {
   async function handleInputMode(mode: InputMode) {
     setError(null)
     setInputMode(mode)
+    setStage('idle')
+    setStageDetail(undefined)
     if (mode === 'synthetic') {
       setLive(null)
       setUploadName(null)
+      setShowStory(true)
       setStatus(
         'Sample ready — scroll down to see pulse, motion risk, and trusted face areas.',
       )
@@ -121,10 +140,12 @@ export default function App() {
     }
     if (mode === 'webcam') {
       setUploadName(null)
+      setShowStory(false)
       await startWebcam()
     } else {
       setLive(null)
       setUploadName(null)
+      setShowStory(false)
       setStatus('Choose a short face video to analyze.')
     }
   }
@@ -134,13 +155,16 @@ export default function App() {
     setInputMode('upload')
     setLive(null)
     setUploadName(null)
+    setShowStory(false)
+    setStage('idle')
     setStatus('Choose a short face video to analyze.')
-    // Defer so mode switch paints before the OS file dialog.
     requestAnimationFrame(() => fileInputRef.current?.click())
   }
 
   async function startWebcam() {
     setBusy(true)
+    setStage('finding_face')
+    setStageDetail('Asking for camera access…')
     setStatus('Asking for camera access…')
     try {
       await getFaceLandmarker()
@@ -159,6 +183,8 @@ export default function App() {
         roiRgb: emptyRoiRgb(),
         sampleRateHz: 15,
       })
+      setStage('estimating_pulse')
+      setStageDetail('Keep your face centered')
       setStatus('Camera on — keep your face centered. Results update as frames collect.')
       setBusy(false)
 
@@ -203,11 +229,17 @@ export default function App() {
                     ...roiRgb[id],
                   ].slice(-180)
                 }
-                setStatus(
-                  frames.length < 16
-                    ? `Camera on — collecting frames (${frames.length}/16)…`
-                    : `Camera live — ${frames.length} frames. Results update below.`,
-                )
+                if (frames.length >= 16) {
+                  setStage('done')
+                  setShowStory(true)
+                  setStatus(
+                    `Camera live — ${frames.length} frames. Results update below.`,
+                  )
+                } else {
+                  setStatus(
+                    `Camera on — collecting frames (${frames.length}/16)…`,
+                  )
+                }
                 return {
                   frames,
                   roiRgb: nextRgb,
@@ -226,6 +258,7 @@ export default function App() {
       rafRef.current = requestAnimationFrame(tick)
     } catch (e) {
       setBusy(false)
+      setStage('idle')
       setError(
         e instanceof Error
           ? e.message
@@ -247,10 +280,32 @@ export default function App() {
     setError(null)
     setInputMode('upload')
     setUploadName(file.name)
-    setStatus(`Loading “${file.name}”…`)
+    setShowStory(false)
+    setStage('optimizing')
+    setStageDetail('Capping resolution (~720p) and length (~15s)…')
+    setStatus(`Optimizing “${file.name}”…`)
     stopWebcam()
     try {
-      const url = URL.createObjectURL(file)
+      const optimized = await optimizeVideoFile(file, {
+        onProgress: (pct) => {
+          setStageDetail(`Optimizing… ${Math.round(pct * 100)}%`)
+        },
+      })
+      const workFile = optimized.file
+      const noteParts: string[] = []
+      if (optimized.downscaled) {
+        noteParts.push(
+          `${optimized.originalWidth}×${optimized.originalHeight} → ${optimized.width}×${optimized.height}`,
+        )
+      }
+      if (optimized.truncated) noteParts.push(`first ${optimized.durationSec.toFixed(0)}s`)
+      if (noteParts.length) {
+        setStatus(`Optimized (${noteParts.join(', ')}). Finding face…`)
+      }
+
+      setStage('finding_face')
+      setStageDetail('Loading clip…')
+      const url = URL.createObjectURL(workFile)
       const video = videoRef.current!
       video.srcObject = null
       video.src = url
@@ -261,6 +316,7 @@ export default function App() {
       setStatus('Finding the face in your video…')
       await getFaceLandmarker()
       const detected = await sampleVideoLandmarks(video, 12, (pct) => {
+        setStageDetail(`Reading landmarks… ${Math.round(pct * 100)}%`)
         setStatus(`Reading face landmarks… ${Math.round(pct * 100)}%`)
       })
 
@@ -269,6 +325,10 @@ export default function App() {
           'Not enough face frames found. Try a clearer, well-lit clip of a face.',
         )
       }
+
+      setStage('estimating_pulse')
+      setStageDetail('Sampling skin color and motion…')
+      setStatus('Estimating pulse from trusted face regions…')
 
       const canvas = canvasRef.current!
       const ctx = canvas.getContext('2d')!
@@ -306,6 +366,8 @@ export default function App() {
           : 12
 
       setLive({ frames, roiRgb, sampleRateHz: fps })
+      setStage('done')
+      setShowStory(true)
       setStatus(
         `Done — ${frames.length} frames from “${file.name}”. Results below updated automatically.`,
       )
@@ -315,6 +377,8 @@ export default function App() {
       setStatus('Upload failed — try another clip, or load the sample.')
       setLive(null)
       setUploadName(null)
+      setStage('idle')
+      setShowStory(false)
     } finally {
       setBusy(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -323,6 +387,7 @@ export default function App() {
 
   const lastLandmarks = source?.frames[source.frames.length - 1] ?? null
   const hasResult = Boolean(result)
+  const runSource = modeToSource(inputMode)
 
   return (
     <div className="app-shell">
@@ -403,7 +468,7 @@ export default function App() {
           <div className="live-stat">
             <div className="live-stat-label">Est. BPM</div>
             <div className="live-stat-value">
-              {result ? result.estimatedBpm.toFixed(0) : '—'}
+              {result ? result.gatedBpm.toFixed(0) : '—'}
             </div>
           </div>
           <div className="live-stat">
@@ -435,12 +500,14 @@ export default function App() {
         <span>{status}</span>
       </div>
 
+      <AnalysisProgress stage={stage} detail={stageDetail} />
+
       {inputMode === 'upload' && (
         <section className="upload-panel" aria-label="Upload face video">
           <h2>Upload face video</h2>
           <p className="tip">
-            Short clip of a face, good light. MP4, WebM, or MOV — about 5–20
-            seconds works well.
+            Short clip of a face, good light. Clips are capped client-side to
+            ~720p and ~15 seconds before analysis. MP4, WebM, or MOV work best.
           </p>
           <label className="upload-label">
             {busy ? 'Analyzing…' : uploadName ? 'Choose another video' : 'Choose video file'}
@@ -459,10 +526,30 @@ export default function App() {
             <p className="upload-meta">Loaded: {uploadName}</p>
           )}
           <p className="help-line">
-            For research datasets, use local folders later; this demo uses one
-            video at a time.
+            Privacy: face video stays in your browser. Only optional metric
+            summaries can be shared to the feed.
           </p>
         </section>
+      )}
+
+      {hasResult && showStory && result && (
+        <ResultStory result={result} />
+      )}
+
+      {hasResult && result && risk && showStory && (
+        <ShareToFeed
+          bpm={result.gatedBpm}
+          conflictScore={result.conflict.combined}
+          riskLevel={risk.level}
+          roiWeights={Object.fromEntries(
+            ROI_IDS.map((id) => [
+              id,
+              Number((result.reliability.weights[id] ?? 0).toFixed(4)),
+            ]),
+          )}
+          source={runSource}
+          onShared={() => setFeedTick((t) => t + 1)}
+        />
       )}
 
       <div className="layout">
@@ -760,10 +847,13 @@ export default function App() {
         />
       </div>
 
+      <RecentRuns refreshToken={feedTick} />
+
       <footer className="site-foot">
         <p>
           Browser demo for learning — not a medical device. Camera and upload
-          need a one-time model download.
+          need a one-time model download. Shared feed stores metric summaries
+          only, never raw face video.
         </p>
       </footer>
 
