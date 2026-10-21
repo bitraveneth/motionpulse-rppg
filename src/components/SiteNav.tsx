@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { isLocalLabEnabled } from '../lib/lab/enabled'
-
 type Props = {
   /** Primary pill CTA label */
   primaryCta?: { label: string; to: string }
@@ -10,7 +8,6 @@ type Props = {
 export function SiteNav({ primaryCta }: Props) {
   const [open, setOpen] = useState(false)
   const location = useLocation()
-  const labEnabled = isLocalLabEnabled()
   const onHome = location.pathname === '/'
 
   useEffect(() => {
@@ -34,7 +31,7 @@ export function SiteNav({ primaryCta }: Props) {
     { to: '/scan', label: 'Scan' },
     { to: sectionHref('how-it-works'), label: 'How it works' },
     { to: sectionHref('demo-tools'), label: 'Demo' },
-    ...(labEnabled ? [{ to: sectionHref('local-lab'), label: 'Local lab' }] : []),
+    { to: sectionHref('local-lab'), label: 'Local lab' },
   ]
 
   const cta = primaryCta ?? { label: 'Try sample', to: '/scan?action=sample' }
