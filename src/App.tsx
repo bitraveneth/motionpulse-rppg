@@ -15,6 +15,11 @@ import {
 import { ShareToFeed } from './components/ShareToFeed'
 import { SignalChart, SpectrumChart } from './components/SignalChart'
 import { VitalsPanel } from './components/VitalsPanel'
+import { SiteNav } from './components/SiteNav'
+import {
+  HowItWorksSection,
+  VitalsExplainerSection,
+} from './components/SiteSections'
 import { isLocalLabEnabled } from './lib/lab/enabled'
 import {
   detectVideoFrame,
@@ -1031,51 +1036,59 @@ export default function App() {
           ? `Could not analyze “${activeClip.name}”.`
           : undefined
 
+  function trySampleAndFocus() {
+    void handleInputMode('synthetic')
+  }
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" id="top">
       <div className="atmosphere" aria-hidden />
 
-      <header className="site-masthead">
-        <p className="masthead-eyebrow">Camera-based pulse</p>
-        <h1 className="brand">
-          Motion<span>Pulse</span>
-        </h1>
-        <p className="masthead-headline">
-          Heart rate from a face video — live in your browser.
-        </p>
-        <p className="masthead-support">
-          Upload a short clip, open your webcam, or try the built-in sample.
-          Vitals refine as frames arrive.
-        </p>
-        <div className="masthead-cta" role="group" aria-label="Start monitoring">
-          <button
-            type="button"
-            className="cta cta-primary"
-            onClick={openUploadPicker}
-            disabled={busy || demoLoading}
-          >
-            Upload clip
-          </button>
-          <button
-            type="button"
-            className="cta cta-secondary"
-            onClick={() => void handleInputMode('webcam')}
-            disabled={busy || demoLoading}
-          >
-            Webcam
-          </button>
-          <button
-            type="button"
-            className="cta cta-secondary"
-            onClick={() => void handleInputMode('synthetic')}
-            disabled={busy || demoLoading}
-          >
-            Try sample
-          </button>
-        </div>
-      </header>
+      <SiteNav
+        labEnabled={labEnabled}
+        onTrySample={trySampleAndFocus}
+        busy={busy || demoLoading}
+      />
 
-      <main id="monitor" className="monitor-main" aria-label="Monitoring stage">
+      <section className="hero-site" aria-labelledby="hero-title">
+        <div className="hero-site-inner">
+          <div className="hero-copy">
+            <h1 id="hero-title">
+              See pulse from a face video — with honest signal quality
+            </h1>
+            <p className="hero-copy-lead">
+              MotionPulse runs remote photoplethysmography in your browser. It
+              estimates heart rate from skin-color changes, updates vitals as
+              frames arrive, and tells you when motion may have affected the
+              reading.
+            </p>
+            <div className="hero-cta-row" role="group" aria-label="Start a session">
+              <button
+                type="button"
+                className="cta cta-primary"
+                onClick={trySampleAndFocus}
+                disabled={busy || demoLoading}
+              >
+                Try sample
+              </button>
+              <button
+                type="button"
+                className="cta cta-secondary"
+                onClick={openUploadPicker}
+                disabled={busy || demoLoading}
+              >
+                Upload clip
+              </button>
+            </div>
+            <ul className="hero-checklist">
+              <li>Face detection with region trust weights</li>
+              <li>Live heart-rate estimate while a clip analyzes</li>
+              <li>Session slider for up to 10 clips, one at a time</li>
+              <li>Video stays local unless you share metric summaries</li>
+            </ul>
+          </div>
+
+          <div id="monitor" className="hero-product" aria-label="Live monitor">
           <input
             ref={fileInputRef}
             type="file"
@@ -1089,98 +1102,116 @@ export default function App() {
             }}
           />
 
-          {error && (
-            <div className="error-banner" role="alert">
-              {error}
+            <div className="hero-alerts">
+              {error ? (
+                <div className="error-banner" role="alert">
+                  {error}
+                </div>
+              ) : null}
+              <AnalysisProgress stage={stage} detail={stageDetail} />
+              {queueLeft > 0 ? (
+                <p className="queue-banner" role="status">
+                  {queueLeft} clip{queueLeft === 1 ? '' : 's'} left in the session
+                  queue…
+                </p>
+              ) : null}
             </div>
-          )}
 
-          <AnalysisProgress stage={stage} detail={stageDetail} />
+            <div className="product-frame">
+              <div className="monitor-layout">
+                <MonitorStage
+                  videoRef={videoRef}
+                  canvasRef={canvasRef}
+                  landmarks={lastLandmarks}
+                  inputMode={inputMode}
+                  busy={busy}
+                  hasVideo={hasVideo}
+                  scrub={scrub}
+                  onScrub={handleScrub}
+                  durationSec={durationSec}
+                  onUploadClick={openUploadPicker}
+                  onWebcam={() => void handleInputMode('webcam')}
+                  onSample={() => void handleInputMode('synthetic')}
+                  onLoadDemoSet={() => void loadDemoSet()}
+                  demoLoading={demoLoading}
+                  status={status}
+                  showCtaBar={false}
+                />
 
-          {queueLeft > 0 && (
-            <p className="queue-banner" role="status">
-              {queueLeft} clip{queueLeft === 1 ? '' : 's'} left in the session
-              queue…
-            </p>
-          )}
+                <VitalsPanel
+                  result={result}
+                  respiratory={respiratory}
+                  sparkline={sparkline}
+                  scrub={scrub}
+                  emptyHint={vitalsEmptyHint}
+                  liveEstimating={
+                    liveEstimating ||
+                    (busy && stage === 'estimating_pulse' && Boolean(result))
+                  }
+                />
+              </div>
+            </div>
 
-          <div className="monitor-layout">
-            <MonitorStage
-              videoRef={videoRef}
-              canvasRef={canvasRef}
-              landmarks={lastLandmarks}
-              inputMode={inputMode}
-              busy={busy}
-              hasVideo={hasVideo}
-              scrub={scrub}
-              onScrub={handleScrub}
-              durationSec={durationSec}
-              onUploadClick={openUploadPicker}
-              onWebcam={() => void handleInputMode('webcam')}
-              onSample={() => void handleInputMode('synthetic')}
-              onLoadDemoSet={() => void loadDemoSet()}
-              demoLoading={demoLoading}
-              status={status}
-            />
-
-            <VitalsPanel
-              result={result}
-              respiratory={respiratory}
-              sparkline={sparkline}
-              scrub={scrub}
-              emptyHint={vitalsEmptyHint}
-              liveEstimating={
-                liveEstimating ||
-                (busy && stage === 'estimating_pulse' && Boolean(result))
-              }
-            />
+            <div className="monitor-secondary-actions">
+              <button
+                type="button"
+                className="btn-text"
+                onClick={() => void handleInputMode('webcam')}
+                disabled={busy || demoLoading}
+              >
+                Use webcam
+              </button>
+              <button
+                type="button"
+                className="btn-text"
+                onClick={() => void loadDemoSet()}
+                disabled={busy || demoLoading}
+              >
+                {demoLoading ? 'Loading demo set…' : 'Load demo set'}
+              </button>
+            </div>
           </div>
+        </div>
+      </section>
 
-          <SessionBrowser
-            clips={sessionRuns}
-            activeId={activeSessionId}
-            onSelect={(id) => void selectSessionClip(id, { force: true })}
-          />
+      <div className="session-block">
+        <SessionBrowser
+          clips={sessionRuns}
+          activeId={activeSessionId}
+          onSelect={(id) => void selectSessionClip(id, { force: true })}
+        />
+        <SessionStrip
+          runs={sessionRuns}
+          activeId={activeSessionId}
+          onSelect={(id) => void selectSessionClip(id, { force: true })}
+          onClear={clearSession}
+          max={SESSION_MAX}
+        />
+      </div>
 
-          <SessionStrip
-            runs={sessionRuns}
-            activeId={activeSessionId}
-            onSelect={(id) => void selectSessionClip(id, { force: true })}
-            onClear={clearSession}
-            max={SESSION_MAX}
-          />
-
-      </main>
+      <HowItWorksSection />
+      <VitalsExplainerSection />
 
       <div className="lower-fold">
-        <nav className="lower-nav" aria-label="More on this page">
-          <a href="#recent-runs">Recent runs</a>
-          <a href="#how-to-read">How to read</a>
-          <a href="#demo-tools">Demo tools</a>
-          {labEnabled ? <a href="#local-lab">Local lab</a> : null}
-        </nav>
+        <section
+          id="demo-tools"
+          className="lower-section demo-tools-section site-section"
+          aria-labelledby="demo-tools-title"
+        >
+          <header className="lower-section-head site-section-inner">
+            <h2 id="demo-tools-title">Demo tools</h2>
+            <p className="site-section-lead">
+              Share runs to the feed, read tips before uploading, and open motion
+              and spectrum detail when you want to dig in.
+            </p>
+          </header>
 
-        <div id="recent-runs" className="lower-section">
+          <div className="site-section-inner">
+        <div id="recent-runs" className="lower-section" style={{ padding: 0 }}>
           <RecentRuns refreshToken={feedTick} />
         </div>
 
-        <div id="how-to-read" className="lower-section">
-          {showStory && <EducationSection variant="guide" />}
-        </div>
-
-        <section
-          id="demo-tools"
-          className="lower-section demo-tools-section"
-          aria-labelledby="demo-tools-title"
-        >
-          <header className="lower-section-head">
-            <p className="lower-kicker">Demo</p>
-            <h2 id="demo-tools-title">Demo tools</h2>
-            <p>
-              Share metric summaries, tune the pipeline, or inspect motion and
-              spectrum — still all in-browser.
-            </p>
-          </header>
+        {showStory ? <EducationSection variant="guide" /> : null}
 
           <EducationSection variant="tips" />
 
@@ -1403,12 +1434,17 @@ export default function App() {
               />
             </div>
           </details>
-
+          </div>
         </section>
 
         {labEnabled ? (
-          <section id="local-lab" className="lower-section local-lab-wrap">
-            <LocalLab onPublished={() => setFeedTick((t) => t + 1)} />
+          <section
+            id="local-lab"
+            className="lower-section local-lab-wrap site-section site-section-alt"
+          >
+            <div className="site-section-inner">
+              <LocalLab onPublished={() => setFeedTick((t) => t + 1)} />
+            </div>
           </section>
         ) : null}
       </div>
@@ -1416,13 +1452,13 @@ export default function App() {
       <footer className="site-foot">
         {uploadName ? (
           <p className="help-line">
-            Last clip: {uploadName}. Face video stays in your browser — only
-            optional metric summaries can go to the feed.
+            Last clip: {uploadName}. Face video stays in your browser.
           </p>
         ) : null}
-        <p>
-          Educational demo — not a medical device. Blood pressure is not
-          estimated from rPPG alone.
+        <p className="site-foot-research">
+          MotionPulse is a research and education demo for motion-aware rPPG —
+          not a medical device. Built to explore how face video can estimate
+          pulse while flagging motion contamination.
         </p>
       </footer>
     </div>
