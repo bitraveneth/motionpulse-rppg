@@ -1,0 +1,38 @@
+# Synthetic smoke config — no real datasets required.
+dataset: synthetic
+data_root: data
+out_dir: research/out
+
+frames: 64
+height: 36
+width: 36
+sample_rate_hz: 30.0
+phys_band_hz: [0.7, 4.0]
+
+train_size: 24
+val_size: 8
+test_size: 8
+motion_prob: 0.6
+motion_amp_range: [0.0, 0.8]
+seed: 42
+
+# PhysNet
+base_ch: 8
+epochs: 2
+batch_size: 4
+lr: 0.001
+device: cpu
+
+# Conflict
+alpha: 0.5
+beta: 0.5
+residual_floor: 0.15
+conflict_boost: 1.0
+max_lag_sec: 0.5
+
+# Regional reliability: R = σ(a_Q Q − a_M M + b)
+a_q: 4.0
+a_m: 4.0
+b: 0.0
+
+checkpoint: research/out/physnet_synthetic.pt

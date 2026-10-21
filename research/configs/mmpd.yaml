@@ -1,0 +1,30 @@
+# Stub — activate when MMPD is under data/MMPD (gitignored).
+dataset: mmpd
+data_root: data
+out_dir: research/out
+
+frames: 128
+height: 72
+width: 72
+sample_rate_hz: 30.0
+phys_band_hz: [0.7, 4.0]
+
+# Expected: data/MMPD/... (per release agreement)
+split: subject_independent
+
+base_ch: 16
+epochs: 30
+batch_size: 8
+lr: 0.0001
+device: cpu
+
+alpha: 0.5
+beta: 0.5
+residual_floor: 0.15
+conflict_boost: 1.0
+
+a_q: 4.0
+a_m: 4.0
+b: 0.0
+
+checkpoint: research/out/physnet_mmpd.pt

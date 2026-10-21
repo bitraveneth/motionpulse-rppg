@@ -144,6 +144,19 @@ Posts rows from `out/batch-results.json` to Supabase when keys are set; otherwis
 
 Training baselines: [rPPG-Toolbox](https://github.com/ubicomplab/rPPG-Toolbox).
 
+## Research pipeline
+
+Thesis scientific path (PhysNet + conflict + regional reliability) lives under [`research/`](research/README.md). MotioPulse remains the primary interactive UI; the Python package smokes on **synthetic** data until you drop UBFC/PURE/MMPD under `data/` (gitignored).
+
+```bash
+python3 -m pip install -e ".[research]"
+python -m research.train --config research/configs/synthetic.yaml
+python -m research.eval --config research/configs/synthetic.yaml
+python -m research.rq1_conflict_analysis --config research/configs/synthetic.yaml
+```
+
+See [research/README.md](research/README.md) for install details, PhysNet citation (Yu et al., BMVC 2019), and how to point configs at `data/UBFC` later. **Does not claim RQ1–RQ4 are answered.**
+
 ## Notes
 
 - Classical CHROM / POS candidate; MediaPipe Face Landmarker for upload/webcam.

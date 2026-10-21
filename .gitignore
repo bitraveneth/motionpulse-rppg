@@ -24,14 +24,31 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local data (do not push)
-data/
-datasets/
+# Local data (do not push) — root paths only so research/data/ package is tracked
+/data/
+/datasets/
 samples/real/
-out/
+/out/
+research/out/
 *.avi
 *.mp4
 !public/**/*.mp4
 .env
 .env.*
 !.env.example
+
+# Python / research
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist-py/
+.venv/
+venv/
+*.pt
+*.pth
+*.ckpt
+.pytest_cache/
+.mypy_cache/
+

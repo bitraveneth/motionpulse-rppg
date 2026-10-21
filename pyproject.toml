@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "motionpulse-rppg"
+version = "0.2.0"
+description = "MotionPulse browser demo + thesis research scaffold (rPPG)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "bitraveneth" }]
+license = { text = "MIT" }
+
+[project.optional-dependencies]
+research = [
+  "numpy>=1.23",
+  "scipy>=1.10",
+  "torch>=2.0",
+  "PyYAML>=6.0",
+  "tqdm>=4.65",
+]
+
+[tool.setuptools.packages.find]
+include = ["research*"]
+exclude = ["research.out*", "data*"]
