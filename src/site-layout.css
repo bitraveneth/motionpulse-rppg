@@ -19,11 +19,19 @@
 
   html {
     scroll-padding-top: calc(var(--nav-h) + 0.75rem);
+    overflow-x: hidden;
   }
 
   body {
     color: var(--site-ink);
     background: var(--site-bg);
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  #root {
+    overflow-x: hidden;
+    max-width: 100%;
   }
 }
 
@@ -45,9 +53,12 @@
   }
 
   .app-shell {
-    max-width: none;
+    max-width: 100%;
+    width: 100%;
     padding: 0;
     margin: 0;
+    overflow-x: hidden;
+    box-sizing: border-box;
   }
 
   /* —— Nav —— */
@@ -186,41 +197,88 @@
 
   /* —— Hero —— */
   .hero-site {
-    padding: 2.5rem 1.15rem 3rem;
+    padding: 1.75rem 1.25rem 2.75rem;
+    box-sizing: border-box;
+    max-width: 100%;
   }
 
   .hero-site-inner {
     max-width: var(--site-max);
+    width: 100%;
     margin: 0 auto;
     display: grid;
-    gap: 2.5rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
     align-items: start;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .hero-site-inner > * {
+    min-width: 0;
   }
 
   @media (min-width: 960px) {
+    .hero-site {
+      padding: 2rem 1.5rem 3rem;
+    }
+
     .hero-site-inner {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
-      gap: 3rem;
-      align-items: center;
+      gap: 2.75rem;
+      align-items: start;
     }
+
+    .hero-copy {
+      padding-top: 0.35rem;
+    }
+
+    .hero-product {
+      padding-top: 0.35rem;
+    }
+  }
+
+  .hero-copy {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
   }
 
   .hero-copy h1 {
     margin: 0;
     font-family: var(--font-display);
-    font-size: clamp(2.35rem, 5vw, 3.25rem);
+    font-size: clamp(1.72rem, 6.8vw, 3.25rem);
     font-weight: 650;
-    letter-spacing: -0.035em;
-    line-height: 1.08;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
     color: var(--site-ink);
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
+    hyphens: auto;
+  }
+
+  @media (max-width: 480px) {
+    .hero-copy h1 {
+      font-size: clamp(1.55rem, 7.5vw, 1.85rem);
+      letter-spacing: -0.015em;
+    }
+
+    .hero-copy-lead {
+      font-size: 0.98rem;
+    }
   }
 
   .hero-copy-lead {
     margin: 1.1rem 0 0;
     max-width: 28rem;
-    font-size: 1.08rem;
+    width: 100%;
+    font-size: 1.05rem;
     line-height: 1.55;
     color: var(--site-ink-soft);
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
+    hyphens: auto;
   }
 
   .hero-cta-row {
@@ -260,6 +318,14 @@
 
   .hero-product {
     scroll-margin-top: calc(var(--nav-h) + 0.5rem);
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .hero-cta-row .cta {
+    max-width: 100%;
   }
 
   .product-frame {
@@ -270,6 +336,27 @@
     box-shadow:
       0 24px 48px -32px rgba(20, 36, 51, 0.22),
       0 1px 0 rgba(255, 255, 255, 0.8) inset;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .product-frame .monitor-stage,
+  .product-frame .monitor-timeline,
+  .product-frame .vitals-panel {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .product-frame .monitor-time {
+    min-width: 0;
+    font-size: 0.72rem;
+  }
+
+  .product-frame .monitor-timeline {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.45rem;
   }
 
   .product-frame .monitor-layout {
@@ -330,8 +417,11 @@
 
   .session-block {
     max-width: var(--site-max);
+    width: 100%;
     margin: 0 auto;
-    padding: 0 1.15rem 2.5rem;
+    padding: 0 1.25rem 2.5rem;
+    box-sizing: border-box;
+    min-width: 0;
   }
 
   /* —— Sections —— */

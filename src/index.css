@@ -43,9 +43,11 @@
   .app-shell {
     position: relative;
     isolation: isolate;
-    max-width: 1180px;
+    max-width: 100%;
+    width: 100%;
     margin: 0 auto;
-    padding: 1.25rem 1.15rem 3.5rem;
+    padding: 0;
+    box-sizing: border-box;
   }
 
   .hero-monitor {
