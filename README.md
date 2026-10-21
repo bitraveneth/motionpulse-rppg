@@ -138,6 +138,7 @@ Posts rows from `out/batch-results.json` to Supabase when keys are set; otherwis
 
 | Dataset | Access |
 |---------|--------|
+| **SCAMPS** (synthetic, public example) | [GitHub + Azure example ~1.2GB](https://github.com/danmcduff/scampsdataset) → `data/SCAMPS/` via `scripts/download_scamps_example.sh` |
 | **UBFC-rPPG** | [Official page](https://sites.google.com/view/ybenezeth/ubfcrppg) |
 | **PURE** | [TU Ilmenau PURE](https://www.tu-ilmenau.de/en/university/departments/department-of-computer-science-and-automation/profile/institutes-and-groups/institute-of-computer-and-systems-engineering/group-for-neuroinformatics-and-cognitive-robotics/data-sets-code/pulse-rate-detection-dataset-pure) |
 | **MMPD** | [Release agreement](https://github.com/McJackTang/MMPD_rPPG_dataset/blob/main/MMPD_Release_Agreement.pdf) |
@@ -146,13 +147,31 @@ Training baselines: [rPPG-Toolbox](https://github.com/ubicomplab/rPPG-Toolbox).
 
 ## Research pipeline
 
-Thesis scientific path (PhysNet + conflict + regional reliability) lives under [`research/`](research/README.md). MotioPulse remains the primary interactive UI; the Python package smokes on **synthetic** data until you drop UBFC/PURE/MMPD under `data/` (gitignored).
+Thesis scientific path (PhysNet + conflict + regional reliability) lives under [`research/`](research/README.md). MotioPulse remains the primary interactive UI; the Python package smokes on **synthetic** data, or on the public **SCAMPS** 10-video example, until you drop UBFC/PURE/MMPD under `data/` (gitignored).
 
 ```bash
 python3 -m pip install -e ".[research]"
-python -m research.train --config research/configs/synthetic.yaml
-python -m research.eval --config research/configs/synthetic.yaml
-python -m research.rq1_conflict_analysis --config research/configs/synthetic.yaml
+python3 -m research.train --config research/configs/synthetic.yaml
+python3 -m research.eval --config research/configs/synthetic.yaml
+python3 -m research.rq1_conflict_analysis --config research/configs/synthetic.yaml
+```
+
+### SCAMPS example (public download, ~1.2GB)
+
+No faculty gate. Official README: [danmcduff/scampsdataset](https://github.com/danmcduff/scampsdataset).  
+**Academic note:** SCAMPS is synthetic faces — pipeline check only, not a substitute for PURE/UBFC/MMPD for final thesis claims.
+
+```bash
+bash scripts/download_scamps_example.sh
+# or:
+# mkdir -p data/SCAMPS && cd data/SCAMPS
+# curl -L -o scamps_videos_example.tar.gz \
+#   "https://facesyntheticspubwedata.z6.web.core.windows.net/neurips-2022/scamps_videos_example.tar.gz"
+# tar -xzf scamps_videos_example.tar.gz
+
+python3 -m research.train --config research/configs/scamps.yaml
+python3 -m research.eval --config research/configs/scamps.yaml
+python3 -m research.rq1_conflict_analysis --config research/configs/scamps.yaml
 ```
 
 See [research/README.md](research/README.md) for install details, PhysNet citation (Yu et al., BMVC 2019), and how to point configs at `data/UBFC` later. **Does not claim RQ1–RQ4 are answered.**

@@ -1,10 +1,14 @@
-"""RQ1 offline analysis: conflict score vs HR error on synthetic data.
+"""RQ1 offline analysis: conflict score vs HR error.
+
+Uses the configured dataset when available (e.g. SCAMPS); falls back to
+on-the-fly synthetic windows for ``dataset: synthetic``.
 
 Does **not** claim the scientific RQ is answered — only that the analysis
 pipeline runs and writes a scatter/CSV for later real-data use.
 
 Usage:
   python -m research.rq1_conflict_analysis --config research/configs/synthetic.yaml
+  python -m research.rq1_conflict_analysis --config research/configs/scamps.yaml
 """
 
 from __future__ import annotations
@@ -30,7 +34,12 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="RQ1: conflict vs error (offline)")
     p.add_argument("--config", default="research/configs/synthetic.yaml")
     p.add_argument("--checkpoint", default=None)
-    p.add_argument("--n", type=int, default=48, help="Number of synthetic windows")
+    p.add_argument(
+        "--n",
+        type=int,
+        default=None,
+        help="Max windows (synthetic default 48; dataset uses all up to this cap)",
+    )
     p.add_argument("--device", default=None)
     return p.parse_args()
 
@@ -45,6 +54,7 @@ def main() -> int:
     frames = int(cfg.get("frames", 64))
     h = int(cfg.get("height", 36))
     w = int(cfg.get("width", 36))
+    name = str(cfg.get("dataset", "synthetic")).lower()
 
     ckpt_path = Path(args.checkpoint or cfg.get("checkpoint", out_dir / "physnet_synthetic.pt"))
     model = PhysNet(frames=frames, base_ch=int(cfg.get("base_ch", 8))).to(device)
@@ -60,49 +70,95 @@ def main() -> int:
     model.eval()
 
     rows = []
-    rng = np.random.default_rng(int(cfg.get("seed", 42)))
+    data_note = "synthetic"
 
     with torch.no_grad():
-        for i in range(args.n):
-            amp = float(rng.uniform(0.0, 1.0))
-            win = generate_synthetic_window(
-                frames=frames,
-                height=h,
-                width=w,
-                sample_rate_hz=fs,
-                motion_amp=amp,
-                motion_at_pulse_freq=True,
-                seed=int(cfg.get("seed", 42)) + i,
-            )
-            video = torch.from_numpy(win.video).unsqueeze(0).to(device)
-            pred = model(video).cpu().numpy()[0]
-            m = win.motion
-            n = min(m.shape[0], pred.shape[0] - 1)
-            cand = pred[1 : n + 1]
-            cs = compute_conflict(
-                m[:n],
-                cand,
-                sample_rate_hz=fs,
-                phys_band_hz=phys,
-                alpha=float(cfg.get("alpha", 0.5)),
-                beta=float(cfg.get("beta", 0.5)),
-            )
-            pred_hr = waveform_to_hr(pred, fs, phys)
-            err = abs(pred_hr - win.hr_bpm)
-            rows.append(
-                {
-                    "idx": i,
-                    "hr_true": win.hr_bpm,
-                    "hr_pred": pred_hr,
-                    "abs_err": err,
-                    "c_temp": cs.c_temp,
-                    "c_spec": cs.c_spec,
-                    "c": cs.combined,
-                    "motion_amp": amp,
-                }
-            )
+        if name in ("synthetic", "synth"):
+            n = int(args.n if args.n is not None else 48)
+            rng = np.random.default_rng(int(cfg.get("seed", 42)))
+            for i in range(n):
+                amp = float(rng.uniform(0.0, 1.0))
+                win = generate_synthetic_window(
+                    frames=frames,
+                    height=h,
+                    width=w,
+                    sample_rate_hz=fs,
+                    motion_amp=amp,
+                    motion_at_pulse_freq=True,
+                    seed=int(cfg.get("seed", 42)) + i,
+                )
+                video = torch.from_numpy(win.video).unsqueeze(0).to(device)
+                pred = model(video).cpu().numpy()[0]
+                m = win.motion
+                nn = min(m.shape[0], pred.shape[0] - 1)
+                cand = pred[1 : nn + 1]
+                cs = compute_conflict(
+                    m[:nn],
+                    cand,
+                    sample_rate_hz=fs,
+                    phys_band_hz=phys,
+                    alpha=float(cfg.get("alpha", 0.5)),
+                    beta=float(cfg.get("beta", 0.5)),
+                )
+                pred_hr = waveform_to_hr(pred, fs, phys)
+                err = abs(pred_hr - win.hr_bpm)
+                rows.append(
+                    {
+                        "idx": i,
+                        "hr_true": win.hr_bpm,
+                        "hr_pred": pred_hr,
+                        "abs_err": err,
+                        "c_temp": cs.c_temp,
+                        "c_spec": cs.c_spec,
+                        "c": cs.combined,
+                        "motion_amp": amp,
+                    }
+                )
+        else:
+            try:
+                ds = get_dataset(cfg, split="test")
+            except FileNotFoundError as e:
+                print(str(e))
+                return 2
+            data_note = name
+            loader = DataLoader(ds, batch_size=1, shuffle=False)
+            cap = args.n
+            for i, batch in enumerate(loader):
+                if cap is not None and i >= cap:
+                    break
+                video = batch["video"].to(device)
+                pred = model(video).cpu().numpy()[0]
+                m = batch["motion"].cpu().numpy()[0]
+                hr_true = float(batch["hr_bpm"].cpu().numpy()[0])
+                nn = min(m.shape[0], pred.shape[0] - 1)
+                cand = pred[1 : nn + 1]
+                cs = compute_conflict(
+                    m[:nn],
+                    cand,
+                    sample_rate_hz=fs,
+                    phys_band_hz=phys,
+                    alpha=float(cfg.get("alpha", 0.5)),
+                    beta=float(cfg.get("beta", 0.5)),
+                )
+                pred_hr = waveform_to_hr(pred, fs, phys)
+                err = abs(pred_hr - hr_true)
+                rows.append(
+                    {
+                        "idx": i,
+                        "hr_true": hr_true,
+                        "hr_pred": pred_hr,
+                        "abs_err": err,
+                        "c_temp": cs.c_temp,
+                        "c_spec": cs.c_spec,
+                        "c": cs.combined,
+                        "motion_amp": float(np.mean(np.abs(m))),
+                    }
+                )
 
-    # Pearson between C and |HR error| (descriptive only)
+    if not rows:
+        print("No windows for RQ1 analysis.")
+        return 2
+
     c_arr = np.array([r["c"] for r in rows], dtype=np.float64)
     e_arr = np.array([r["abs_err"] for r in rows], dtype=np.float64)
     if c_arr.std() > 1e-9 and e_arr.std() > 1e-9:
@@ -112,11 +168,12 @@ def main() -> int:
 
     summary = {
         "n": len(rows),
+        "dataset": data_note,
         "pearson_C_vs_abs_err": corr,
         "mean_C": float(c_arr.mean()),
         "mean_abs_err": float(e_arr.mean()),
         "note": (
-            "Offline descriptive association on synthetic data only. "
+            f"Offline descriptive association on {data_note} data only. "
             "Does not answer RQ1 scientifically."
         ),
     }

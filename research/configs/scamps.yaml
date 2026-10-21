@@ -1,0 +1,40 @@
+# SCAMPS 10-video example — short Mac-friendly PhysNet smoke.
+# Download into data/SCAMPS/ (gitignored). See scripts/download_scamps_example.sh
+# and https://github.com/danmcduff/scampsdataset
+#
+# Academic note: SCAMPS is synthetic faces — useful for pipeline checks, not a
+# substitute for PURE/UBFC/MMPD for final thesis claims.
+dataset: scamps
+data_root: data
+out_dir: research/out
+
+frames: 64
+height: 36
+width: 36
+sample_rate_hz: 30.0
+phys_band_hz: [0.7, 4.0]
+stride: 32
+# File-level split when Train/Val/Test folders are absent (10-video example)
+split_ratios: [7, 1, 2]
+# Cap windows so a few epochs finish on CPU/Mac
+max_train_windows: 48
+max_val_windows: 8
+max_test_windows: 16
+
+base_ch: 8
+epochs: 3
+batch_size: 4
+lr: 0.001
+device: cpu
+
+alpha: 0.5
+beta: 0.5
+residual_floor: 0.15
+conflict_boost: 1.0
+max_lag_sec: 0.5
+
+a_q: 4.0
+a_m: 4.0
+b: 0.0
+
+checkpoint: research/out/physnet_scamps.pt

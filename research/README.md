@@ -52,7 +52,37 @@ Outputs land in `research/out/` (gitignored): checkpoints, `eval_*.json`, `rq1_*
 ## Configs
 
 - `configs/synthetic.yaml` — smoke training (default)
+- `configs/scamps.yaml` — official SCAMPS 10-video example (public download)
 - `configs/ubfc.yaml` / `pure.yaml` / `mmpd.yaml` — stubs; fail clearly if `data/` missing
+
+## SCAMPS (public ~1.2GB example)
+
+SCAMPS is **synthetic faces** — useful for end-to-end pipeline checks without MMPD faculty gatekeeping. It is **not** a substitute for PURE / UBFC / MMPD for final thesis claims.
+
+Official project: [danmcduff/scampsdataset](https://github.com/danmcduff/scampsdataset).  
+Example archive URL (from that README; Azure blob links can change — re-check the page if download fails):
+
+`https://facesyntheticspubwedata.z6.web.core.windows.net/neurips-2022/scamps_videos_example.tar.gz`
+
+```bash
+# Option A: helper script
+bash scripts/download_scamps_example.sh
+
+# Option B: manual
+mkdir -p data/SCAMPS
+cd data/SCAMPS
+curl -L -o scamps_videos_example.tar.gz \
+  "https://facesyntheticspubwedata.z6.web.core.windows.net/neurips-2022/scamps_videos_example.tar.gz"
+tar -xzf scamps_videos_example.tar.gz
+cd ../..
+
+python3 -m pip install -e ".[research]"
+python3 -m research.train --config research/configs/scamps.yaml
+python3 -m research.eval --config research/configs/scamps.yaml
+python3 -m research.rq1_conflict_analysis --config research/configs/scamps.yaml
+```
+
+Loader reads `data/SCAMPS/**/*.mat` (or Train/Val/Test layout), prefers `Xsub` else `RawFrames`, uses `d_ppg`, and builds a motion proxy from `d_pitch`/`d_yaw`/`d_rol` (else frame diffs). With few files (e.g. 10), split is **7 train / 1 val / 2 test**.
 
 ## When you add UBFC
 
