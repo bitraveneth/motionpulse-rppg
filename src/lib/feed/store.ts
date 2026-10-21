@@ -1,11 +1,13 @@
 /**
  * Results feed: Supabase when VITE_SUPABASE_* are set, else localStorage mock.
- * Metrics only — never uploads video.
+ * Metrics + optional tiny thumb / sparkline — never uploads video.
  */
 
 import {
+  clampThumbnailData,
   displayNickname,
   normalizeNickname,
+  normalizeSparkline,
   type NewRunInput,
   type RunRecord,
 } from './types'
@@ -47,7 +49,7 @@ function readMock(): RunRecord[] {
     const raw = localStorage.getItem(MOCK_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as RunRecord[]
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed) ? parsed.map(normalizeRun) : []
   } catch {
     return []
   }
@@ -63,7 +65,7 @@ function restBase(): { url: string; key: string } {
   return { url, key }
 }
 
-function mapRow(row: Record<string, unknown>): RunRecord {
+function normalizeRun(row: Partial<RunRecord> & Record<string, unknown>): RunRecord {
   return {
     id: String(row.id),
     created_at: String(row.created_at),
@@ -74,7 +76,16 @@ function mapRow(row: Record<string, unknown>): RunRecord {
     roi_weights: (row.roi_weights as RunRecord['roi_weights']) ?? {},
     source: row.source as RunRecord['source'],
     client_id: (row.client_id as string | null) ?? null,
+    thumbnail_url: (row.thumbnail_url as string | null) ?? null,
+    thumbnail_data: clampThumbnailData(
+      (row.thumbnail_data as string | null) ?? null,
+    ),
+    sparkline: normalizeSparkline((row.sparkline as string | null) ?? null),
   }
+}
+
+function mapRow(row: Record<string, unknown>): RunRecord {
+  return normalizeRun(row)
 }
 
 export async function listRuns(limit = 24): Promise<{
@@ -112,6 +123,10 @@ export async function shareRun(input: NewRunInput): Promise<{
 }> {
   const nickname = normalizeNickname(input.nickname)
   const client_id = input.client_id ?? getClientId()
+  const thumbnail_data = clampThumbnailData(input.thumbnail_data)
+  const sparkline = normalizeSparkline(input.sparkline)
+  const thumbnail_url = input.thumbnail_url?.trim() || null
+
   const payload = {
     nickname,
     bpm: Math.round(input.bpm * 10) / 10,
@@ -120,6 +135,10 @@ export async function shareRun(input: NewRunInput): Promise<{
     roi_weights: input.roi_weights,
     source: input.source,
     client_id,
+    thumbnail_url,
+    // Prefer URL for live Supabase when present; still allow inline if small
+    thumbnail_data: thumbnail_url ? null : thumbnail_data,
+    sparkline,
   }
 
   if (!isSupabaseConfigured()) {
@@ -130,10 +149,22 @@ export async function shareRun(input: NewRunInput): Promise<{
           : `local_${Date.now()}`,
       created_at: new Date().toISOString(),
       ...payload,
+      // Mock keeps inline data URL so gallery works offline
+      thumbnail_data,
     }
     const next = [run, ...readMock()].slice(0, 100)
     writeMock(next)
     return { run, mode: 'mock' }
+  }
+
+  // Live: if inline thumb is huge, drop it (schema text is fine but keep rows lean).
+  // Prefer thumbnail_url pointing at Storage `thumbs` when operators upload there.
+  const livePayload = {
+    ...payload,
+    thumbnail_data:
+      thumbnail_data && thumbnail_data.length < 100_000
+        ? thumbnail_data
+        : null,
   }
 
   const { url, key } = restBase()
@@ -145,7 +176,7 @@ export async function shareRun(input: NewRunInput): Promise<{
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(livePayload),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')

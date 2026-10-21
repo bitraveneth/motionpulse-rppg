@@ -2,7 +2,7 @@
 
 Estimate pulse from a face video in the browser. See when face motion may muddy the signal, and which face areas look most trustworthy.
 
-**Main job:** Load sample → Upload video → Use webcam → read pulse BPM, motion risk, and a trust map. Optionally share **metric summaries** to a public feed.
+**Main job:** Load sample → Upload video → Use webcam → read pulse BPM, motion risk, and a trust map. Optionally share **metric summaries** (+ tiny face thumb + pulse sparkline) to a public feed.
 
 ## Run locally
 
@@ -23,12 +23,26 @@ npm run build
 1. Click **Upload face video** and pick a short clip (MP4 / WebM / MOV).
 2. The browser **optimizes** first: caps resolution (~720p) and duration (~15s) via canvas — no video leaves the device.
 3. Progress stages: **Optimizing → Finding face → Estimating pulse**.
-4. A **result story** card summarizes BPM, motion risk, and trust. Detail panels expand below.
-5. Optionally **Share to feed** (nickname blank → Anonymous). Only metrics are posted — never raw face video.
+4. A **result story** card summarizes BPM, motion risk / reliability badge, trust dots, pulse sparkline, and an optional face thumbnail. Detail panels expand below.
+5. Optionally **Share to feed** (nickname blank → Anonymous). Only metrics + optional tiny thumb/sparkline are posted — never raw face video.
+
+## How to read your results
+
+The in-app **How to read your results** section covers:
+
+| Item | Meaning |
+|------|---------|
+| **BPM** | Educational pulse estimate from the cleaned waveform — not a clinical measurement |
+| **Motion risk** | How much face motion lines up with the pulse estimate |
+| **Stable / Mixed / Unreliable** | Signal-quality badges from that risk — **not** heart-health grades |
+| **Cleaned pulse** | Soft cleanup when risk is high; pulse is never fully wiped |
+| **Trusted face areas** | Which skin regions (forehead / cheeks / lower face) carried more weight |
+
+**High motion risk ≠ a health problem** — it only flags that motion may have affected the estimate. Educational demo — **not for medical use**.
 
 ## Results feed (Supabase or mock)
 
-When `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set, the UI reads/writes a public `runs` table. Otherwise the feed uses **localStorage** so the gallery still works offline.
+When `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set, the UI reads/writes a public `runs` table. Otherwise the feed uses **localStorage** so the gallery still works offline (including thumbnails as compressed data URLs).
 
 ### Enable Supabase
 
@@ -43,7 +57,19 @@ cp .env.example .env
 
 4. Restart `npm run dev`.
 
-Schema fields: `id`, `created_at`, `nickname` (nullable), `bpm`, `conflict_score`, `risk_level`, `roi_weights` (json), `source` (`upload`|`webcam`|`sample`|`batch`), `client_id` (optional). **No video blobs.**
+Schema fields: `id`, `created_at`, `nickname` (nullable), `bpm`, `conflict_score`, `risk_level`, `roi_weights` (json), `source` (`upload`|`webcam`|`sample`|`batch`), `client_id` (optional), `thumbnail_url` / `thumbnail_data` (optional tiny face crop), `sparkline` (SVG path). **No video blobs.**
+
+### Migrating an existing Supabase project
+
+If you already created `runs` before thumbnails/sparklines, run:
+
+```sql
+alter table public.runs add column if not exists thumbnail_url text null;
+alter table public.runs add column if not exists thumbnail_data text null;
+alter table public.runs add column if not exists sparkline text null;
+```
+
+Optionally create a public-read Storage bucket named `thumbs` for ~128–192px JPEG/WebP (~40–80KB). Prefer `thumbnail_url` when using Storage; otherwise `thumbnail_data` (text) is fine under the schema size checks. Re-apply the insert RLS policy from `schema.sql` so the new column length checks apply.
 
 ## Local batch (UBFC / PURE / …)
 
@@ -79,14 +105,16 @@ Posts rows from `out/batch-results.json` to Supabase when keys are set; otherwis
 ## Privacy
 
 - Face video and webcam frames stay in the browser (or on your local batch machine).
-- The feed and `publish-results` store **metrics summaries only** (BPM, risk, ROI weights, optional nickname).
+- The feed and `publish-results` store **metrics summaries only** (BPM, risk, ROI weights, optional nickname, optional tiny thumb + sparkline).
 - Educational demo — **not a medical device**.
 
 ## What the panels mean
 
 | Panel | Plain meaning |
 |-------|----------------|
-| Result story | BPM, motion risk level, trust summary after a run |
+| Before you upload | Face, light, still, ~5–15s tips |
+| How to read your results | BPM, risk, cleaned pulse, trust, Stable/Mixed/Unreliable |
+| Result story | BPM, reliability badge, thumb, sparkline, trust dots |
 | How the face moved | Overall head motion vs local expression/talk |
 | Motion vs pulse risk | Risk score when motion lines up with the pulse estimate — **not proof** |
 | Cleaned pulse estimate | Soft cleanup when risk is high; pulse is never fully wiped |

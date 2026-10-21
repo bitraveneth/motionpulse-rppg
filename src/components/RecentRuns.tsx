@@ -4,7 +4,12 @@ import {
   isSupabaseConfigured,
   listRuns,
 } from '../lib/feed/store'
+import { resolveThumbnail } from '../lib/feed/cardMedia'
+import { reliabilityFromRisk } from '../lib/feed/reliability'
 import type { RunRecord } from '../lib/feed/types'
+import { PulseSparkline } from './PulseSparkline'
+import { ReliabilityBadge } from './ReliabilityBadge'
+import { TrustDots } from './TrustDots'
 
 type Props = {
   refreshToken?: number
@@ -41,7 +46,7 @@ export function RecentRuns({ refreshToken = 0 }: Props) {
         <p>
           Browse metric cards from other sessions
           {mode === 'mock' ? ' (local demo feed)' : ''}. Videos stay on each
-          device.
+          device — feed keeps metrics and optional tiny thumbs only.
         </p>
       </header>
 
@@ -74,24 +79,61 @@ export function RecentRuns({ refreshToken = 0 }: Props) {
       )}
 
       <ul className="feed-cards">
-        {runs.map((run) => (
-          <li key={run.id} className={`feed-card risk-${run.risk_level}`}>
-            <div className="feed-card-top">
-              <span className="feed-nick">{displayNickname(run.nickname)}</span>
-              <span className="feed-source">{run.source}</span>
-            </div>
-            <div className="feed-card-bpm">{run.bpm.toFixed(0)}</div>
-            <div className="feed-card-meta">
-              <span>{run.risk_level} risk</span>
-              <span className="tabular-nums">
-                {run.conflict_score.toFixed(2)}
-              </span>
-            </div>
-            <time dateTime={run.created_at} className="feed-card-time">
-              {formatWhen(run.created_at)}
-            </time>
-          </li>
-        ))}
+        {runs.map((run) => {
+          const thumb = resolveThumbnail(run)
+          const remark = reliabilityFromRisk(run.risk_level)
+          return (
+            <li key={run.id} className={`feed-card risk-${run.risk_level}`}>
+              <div className="feed-card-body">
+                <div className="feed-card-thumb-col">
+                  {thumb ? (
+                    <img
+                      className="feed-thumb"
+                      src={thumb}
+                      alt=""
+                      width={56}
+                      height={56}
+                    />
+                  ) : (
+                    <div className="feed-thumb feed-thumb-placeholder" aria-hidden />
+                  )}
+                </div>
+                <div className="feed-card-main">
+                  <div className="feed-card-top">
+                    <span className="feed-nick">
+                      {displayNickname(run.nickname)}
+                      <span className="feed-bpm-inline">
+                        {' '}
+                        · {run.bpm.toFixed(0)} BPM
+                      </span>
+                    </span>
+                  </div>
+                  <div className="feed-card-meta">
+                    <ReliabilityBadge remark={remark} />
+                    <span className="feed-risk-score tabular-nums">
+                      {run.risk_level} · {run.conflict_score.toFixed(2)}
+                    </span>
+                  </div>
+                  <TrustDots
+                    weights={run.roi_weights}
+                    variant="dots"
+                    className="feed-card-trust"
+                  />
+                  <PulseSparkline
+                    sparkline={run.sparkline}
+                    className="feed-card-spark"
+                  />
+                  <div className="feed-card-foot">
+                    <time dateTime={run.created_at} className="feed-card-time">
+                      {formatWhen(run.created_at)}
+                    </time>
+                    <span className="feed-source">{run.source}</span>
+                  </div>
+                </div>
+              </div>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

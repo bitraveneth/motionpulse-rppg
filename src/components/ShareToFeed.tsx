@@ -9,6 +9,8 @@ type Props = {
   riskLevel: RiskLevel
   roiWeights: RoiWeightsSummary
   source: RunSource
+  thumbnailData?: string | null
+  sparkline?: string | null
   onShared?: (run: RunRecord) => void
 }
 
@@ -18,6 +20,8 @@ export function ShareToFeed({
   riskLevel,
   roiWeights,
   source,
+  thumbnailData,
+  sparkline,
   onShared,
 }: Props) {
   const [nickname, setNickname] = useState('')
@@ -37,6 +41,8 @@ export function ShareToFeed({
         risk_level: riskLevel,
         roi_weights: roiWeights,
         source,
+        thumbnail_data: thumbnailData ?? null,
+        sparkline: sparkline ?? null,
       })
       setMessage(
         mode === 'supabase'
@@ -56,8 +62,9 @@ export function ShareToFeed({
       <header className="panel-head">
         <h2>Share to feed</h2>
         <p>
-          Post metric summaries only — BPM, risk, and trust weights. No face
-          video is uploaded. Leave nickname blank for Anonymous.
+          Post metric summaries plus an optional tiny face thumb and pulse
+          sparkline. No face video is uploaded. Leave nickname blank for
+          Anonymous.
         </p>
       </header>
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnalysisProgress, type AnalysisStage } from './components/AnalysisProgress'
 import { ControlsPanel, type InputMode } from './components/ControlsPanel'
+import { EducationSection } from './components/EducationSection'
 import { FaceOverlay } from './components/FaceOverlay'
 import { MetricPill } from './components/MetricPill'
 import { RecentRuns } from './components/RecentRuns'
@@ -13,6 +14,10 @@ import {
   sampleRoiRgbFromFrame,
   sampleVideoLandmarks,
 } from './lib/mediapipe/faceLandmarker'
+import {
+  buildSparklinePath,
+  captureFaceThumbnail,
+} from './lib/feed/cardMedia'
 import { ROI_LANDMARK_INDICES } from './lib/rppg/motion'
 import { runPipeline, type PipelineResult } from './lib/rppg/pipeline'
 import { conflictRiskLabel } from './lib/rppg/conflict'
@@ -63,6 +68,7 @@ export default function App() {
   const [stageDetail, setStageDetail] = useState<string | undefined>()
   const [feedTick, setFeedTick] = useState(0)
   const [showStory, setShowStory] = useState(true)
+  const [thumbnailData, setThumbnailData] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -70,6 +76,7 @@ export default function App() {
   const webcamStreamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef<number>(0)
   const lastTsRef = useRef(0)
+  const thumbCapturedRef = useRef(false)
 
   const synthetic = useMemo(
     () =>
@@ -107,6 +114,16 @@ export default function App() {
     return null
   }, [source, controls])
 
+  const sparkline = useMemo(() => {
+    if (!result) return null
+    const series =
+      result.suppression.gated.length > 8
+        ? result.suppression.gated
+        : result.candidate
+    const path = buildSparklinePath(series)
+    return path || null
+  }, [result])
+
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
 
   useEffect(() => {
@@ -129,6 +146,8 @@ export default function App() {
     setInputMode(mode)
     setStage('idle')
     setStageDetail(undefined)
+    setThumbnailData(null)
+    thumbCapturedRef.current = false
     if (mode === 'synthetic') {
       setLive(null)
       setUploadName(null)
@@ -156,9 +175,28 @@ export default function App() {
     setLive(null)
     setUploadName(null)
     setShowStory(false)
+    setThumbnailData(null)
+    thumbCapturedRef.current = false
     setStage('idle')
     setStatus('Choose a short face video to analyze.')
     requestAnimationFrame(() => fileInputRef.current?.click())
+  }
+
+  function maybeCaptureThumb(
+    canvas: HTMLCanvasElement,
+    landmarks: FrameLandmarks | null,
+  ) {
+    if (thumbCapturedRef.current) return
+    if (!canvas.width || !landmarks) return
+    const data = captureFaceThumbnail(canvas, landmarks, {
+      blurPx: 0.9,
+      sizePx: 160,
+      quality: 0.7,
+    })
+    if (data) {
+      thumbCapturedRef.current = true
+      setThumbnailData(data)
+    }
   }
 
   async function startWebcam() {
@@ -232,6 +270,7 @@ export default function App() {
                 if (frames.length >= 16) {
                   setStage('done')
                   setShowStory(true)
+                  maybeCaptureThumb(canvas, landmarks)
                   setStatus(
                     `Camera live — ${frames.length} frames. Results update below.`,
                   )
@@ -281,6 +320,8 @@ export default function App() {
     setInputMode('upload')
     setUploadName(file.name)
     setShowStory(false)
+    setThumbnailData(null)
+    thumbCapturedRef.current = false
     setStage('optimizing')
     setStageDetail('Capping resolution (~720p) and length (~15s)…')
     setStatus(`Optimizing “${file.name}”…`)
@@ -364,6 +405,16 @@ export default function App() {
               detected[0]!.timestampMs) /
               (detected.length - 1))
           : 12
+
+      const mid = detected[Math.floor(detected.length / 2)]!
+      video.currentTime = mid.timestampMs / 1000
+      await new Promise<void>((r) => {
+        video.onseeked = () => r()
+      })
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      ctx.drawImage(video, 0, 0)
+      maybeCaptureThumb(canvas, mid.landmarks)
 
       setLive({ frames, roiRgb, sampleRateHz: fps })
       setStage('done')
@@ -532,8 +583,14 @@ export default function App() {
         </section>
       )}
 
+      <EducationSection variant="tips" />
+
       {hasResult && showStory && result && (
-        <ResultStory result={result} />
+        <ResultStory
+          result={result}
+          thumbnailData={thumbnailData}
+          sparkline={sparkline}
+        />
       )}
 
       {hasResult && result && risk && showStory && (
@@ -548,9 +605,13 @@ export default function App() {
             ]),
           )}
           source={runSource}
+          thumbnailData={thumbnailData}
+          sparkline={sparkline}
           onShared={() => setFeedTick((t) => t + 1)}
         />
       )}
+
+      {hasResult && showStory && <EducationSection variant="guide" />}
 
       <div className="layout">
         <section className="panel">
@@ -849,11 +910,13 @@ export default function App() {
 
       <RecentRuns refreshToken={feedTick} />
 
+      {!showStory && <EducationSection variant="guide" />}
+
       <footer className="site-foot">
         <p>
           Browser demo for learning — not a medical device. Camera and upload
           need a one-time model download. Shared feed stores metric summaries
-          only, never raw face video.
+          and optional tiny thumbs only — never raw face video.
         </p>
       </footer>
 

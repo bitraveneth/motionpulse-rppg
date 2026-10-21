@@ -1,9 +1,17 @@
 import { conflictRiskLabel } from '../lib/rppg/conflict'
 import type { PipelineResult } from '../lib/rppg/pipeline'
 import { ROI_IDS, ROI_LABELS } from '../lib/rppg/types'
+import { reliabilityFromConflict } from '../lib/feed/reliability'
+import { PulseSparkline } from './PulseSparkline'
+import { ReliabilityBadge } from './ReliabilityBadge'
+import { TrustDots } from './TrustDots'
 
 type Props = {
   result: PipelineResult
+  /** Optional face crop data URL from the analyzed clip */
+  thumbnailData?: string | null
+  /** SVG path for cleaned/candidate pulse */
+  sparkline?: string | null
 }
 
 function topRoi(result: PipelineResult) {
@@ -19,15 +27,13 @@ function topRoi(result: PipelineResult) {
 }
 
 /** Polished “result story” card after a run. */
-export function ResultStory({ result }: Props) {
+export function ResultStory({ result, thumbnailData, sparkline }: Props) {
   const risk = conflictRiskLabel(result.conflict.combined)
+  const remark = reliabilityFromConflict(result.conflict.combined)
   const trusted = ROI_LABELS[topRoi(result)]
-  const trustFocus =
-    result.reliability.entropy < 1.2
-      ? 'concentrated'
-      : result.reliability.entropy < 1.6
-        ? 'balanced'
-        : 'spread out'
+  const weights = Object.fromEntries(
+    ROI_IDS.map((id) => [id, result.reliability.weights[id] ?? 0]),
+  )
 
   return (
     <section className="result-story" aria-label="Result story">
@@ -40,6 +46,43 @@ export function ResultStory({ result }: Props) {
           reading.
         </p>
       </header>
+
+      <div className="result-story-hero">
+        <div className="result-thumb-wrap">
+          {thumbnailData ? (
+            <img
+              className="result-thumb"
+              src={thumbnailData}
+              alt=""
+              width={96}
+              height={96}
+            />
+          ) : (
+            <div className="result-thumb result-thumb-placeholder" aria-hidden>
+              <span>Pulse</span>
+            </div>
+          )}
+        </div>
+        <div className="result-story-hero-main">
+          <div className="result-story-hero-row">
+            <span className="result-hero-bpm">
+              {result.gatedBpm.toFixed(0)}
+              <span className="result-hero-bpm-unit">BPM</span>
+            </span>
+            <ReliabilityBadge remark={remark} showHeadline />
+          </div>
+          <p className="result-story-hero-sub">
+            {risk.label} · score {result.conflict.combined.toFixed(2)} —{' '}
+            {remark.headline}. High risk ≠ a health problem.
+          </p>
+          <PulseSparkline
+            sparkline={sparkline}
+            className="result-story-spark"
+            label="Cleaned pulse waveform"
+          />
+          <TrustDots weights={weights} variant="dots" className="result-story-trust" />
+        </div>
+      </div>
 
       <div className="result-story-grid">
         <div className="result-beat result-beat-bpm">
@@ -66,24 +109,10 @@ export function ResultStory({ result }: Props) {
           <span className="result-beat-label">Trust summary</span>
           <span className="result-beat-value result-beat-sm">{trusted}</span>
           <span className="result-beat-sub">
-            Most trusted skin region. Focus looks {trustFocus} across the face.
+            Most trusted skin region. Forehead / cheeks / lower face weights
+            below.
           </span>
-          <ul className="trust-bars" aria-label="Region trust weights">
-            {ROI_IDS.map((id) => {
-              const w = result.reliability.weights[id] ?? 0
-              return (
-                <li key={id}>
-                  <span>{ROI_LABELS[id]}</span>
-                  <span className="trust-bar-track">
-                    <span
-                      className="trust-bar-fill"
-                      style={{ width: `${Math.round(w * 100)}%` }}
-                    />
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
+          <TrustDots weights={weights} variant="bars" />
         </div>
       </div>
     </section>

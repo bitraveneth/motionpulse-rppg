@@ -720,6 +720,82 @@
     color: var(--color-ink-soft);
   }
 
+  .result-story-hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.9rem;
+    margin-top: 1rem;
+    align-items: start;
+  }
+
+  .result-thumb-wrap {
+    flex-shrink: 0;
+  }
+
+  .result-thumb {
+    display: block;
+    width: 5.5rem;
+    height: 5.5rem;
+    border-radius: 0.75rem;
+    object-fit: cover;
+    background: linear-gradient(160deg, #d9e8f0, #eef4f7);
+    border: 1px solid color-mix(in oklab, var(--color-sea) 22%, transparent);
+  }
+
+  .result-thumb-placeholder {
+    display: grid;
+    place-items: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-sea);
+  }
+
+  .result-story-hero-main {
+    min-width: 0;
+  }
+
+  .result-story-hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.85rem;
+  }
+
+  .result-hero-bpm {
+    font-family: var(--font-display);
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .result-hero-bpm-unit {
+    margin-left: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-ink-soft);
+  }
+
+  .result-story-hero-sub {
+    margin: 0.4rem 0 0;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: var(--color-ink-soft);
+  }
+
+  .result-story-spark {
+    margin-top: 0.55rem;
+    color: var(--color-sea-deep);
+  }
+
+  .result-story-trust {
+    margin-top: 0.55rem;
+  }
+
   .result-story-grid {
     display: grid;
     gap: 0.85rem;
@@ -729,6 +805,12 @@
   @media (min-width: 720px) {
     .result-story-grid {
       grid-template-columns: 1fr 1.1fr 1.2fr;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .result-story-hero {
+      grid-template-columns: 1fr;
     }
   }
 
@@ -918,11 +1000,11 @@
     margin: 0;
     padding: 0;
     list-style: none;
-    grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr));
   }
 
   .feed-card {
-    padding: 0.85rem 0.9rem;
+    padding: 0.75rem 0.8rem;
     border-radius: 0.75rem;
     background: color-mix(in oklab, white 75%, transparent);
     border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
@@ -940,11 +1022,40 @@
     border-color: color-mix(in oklab, var(--color-warn) 40%, transparent);
   }
 
+  .feed-card-body {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.65rem;
+    align-items: start;
+  }
+
+  .feed-thumb {
+    display: block;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 0.55rem;
+    object-fit: cover;
+    background: linear-gradient(160deg, #d9e8f0, #eef4f7);
+    border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
+  }
+
+  .feed-thumb-placeholder {
+    background: linear-gradient(
+      145deg,
+      color-mix(in oklab, var(--color-mint-soft) 60%, white),
+      #eef4f7
+    );
+  }
+
+  .feed-card-main {
+    min-width: 0;
+  }
+
   .feed-card-top {
     display: flex;
     justify-content: space-between;
     gap: 0.35rem;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
   }
 
   .feed-nick {
@@ -952,41 +1063,248 @@
     color: var(--color-ink);
   }
 
-  .feed-source {
-    color: var(--color-ink-soft);
-    text-transform: lowercase;
-  }
-
-  .feed-card-bpm {
-    margin-top: 0.35rem;
-    font-family: var(--font-display);
-    font-size: 1.85rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
+  .feed-bpm-inline {
+    font-weight: 700;
+    color: var(--color-sea-deep);
     font-variant-numeric: tabular-nums;
   }
 
-  .feed-card-bpm::after {
-    content: ' BPM';
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+  .feed-source {
     color: var(--color-ink-soft);
+    text-transform: lowercase;
+    font-size: 0.7rem;
   }
 
   .feed-card-meta {
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.55rem;
     margin-top: 0.35rem;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: var(--color-ink-soft);
+  }
+
+  .feed-risk-score {
+    font-size: 0.7rem;
+  }
+
+  .feed-card-trust {
+    margin-top: 0.4rem;
+  }
+
+  .feed-card-spark {
+    margin-top: 0.35rem;
+    color: var(--color-sea);
+  }
+
+  .feed-card-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
   }
 
   .feed-card-time {
     display: block;
-    margin-top: 0.45rem;
     font-size: 0.7rem;
     color: color-mix(in oklab, var(--color-ink-soft) 85%, transparent);
+  }
+
+  /* —— Reliability badges (signal quality, not health) —— */
+  .reliability-badge {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+  }
+
+  .reliability-pill {
+    display: inline-block;
+    padding: 0.18rem 0.45rem;
+    border-radius: 0.35rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .reliability-badge.kind-stable .reliability-pill {
+    color: var(--color-sea-deep);
+    background: color-mix(in oklab, var(--color-mint-soft) 70%, white);
+  }
+
+  .reliability-badge.kind-mixed .reliability-pill {
+    color: #7a4e12;
+    background: color-mix(in oklab, var(--color-amber) 28%, white);
+  }
+
+  .reliability-badge.kind-unreliable .reliability-pill {
+    color: var(--color-warn-ink);
+    background: color-mix(in oklab, var(--color-warn) 22%, white);
+  }
+
+  .reliability-headline {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-ink-soft);
+  }
+
+  /* —— Trust dots / mini bars —— */
+  .trust-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .trust-dots li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+  }
+
+  .trust-dot-label {
+    font-size: 0.65rem;
+    color: var(--color-ink-soft);
+  }
+
+  .trust-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--color-ink) 12%, transparent);
+  }
+
+  .trust-dot.level-1 {
+    background: color-mix(in oklab, var(--color-mint) 45%, white);
+  }
+  .trust-dot.level-2 {
+    background: var(--color-mint);
+  }
+  .trust-dot.level-3 {
+    background: var(--color-sea-deep);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-mint) 35%, transparent);
+  }
+
+  .trust-mini-bars {
+    margin: 0.75rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .trust-mini-bars li {
+    display: grid;
+    grid-template-columns: 4.2rem 1fr;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.72rem;
+    color: var(--color-ink-soft);
+  }
+
+  .pulse-spark {
+    display: block;
+    color: var(--color-sea-deep);
+  }
+
+  .pulse-spark.empty {
+    font-size: 0.75rem;
+    color: var(--color-ink-soft);
+  }
+
+  .pulse-spark-img {
+    display: block;
+    height: 1.75rem;
+    width: auto;
+  }
+
+  /* —— Education —— */
+  .edu-section {
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.1rem 1.15rem;
+    border-radius: 0.85rem;
+    background:
+      linear-gradient(
+        165deg,
+        color-mix(in oklab, white 82%, transparent),
+        color-mix(in oklab, var(--color-mint-soft) 22%, white)
+      );
+    border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
+    animation: rise 0.55s ease both;
+  }
+
+  .edu-section h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .edu-tips ul {
+    margin: 0.65rem 0 0;
+    padding: 0 0 0 1.1rem;
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--color-ink);
+  }
+
+  .edu-glossary {
+    margin: 0.85rem 0 0;
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  @media (min-width: 720px) {
+    .edu-glossary {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .edu-glossary div {
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.55rem;
+    background: color-mix(in oklab, white 70%, transparent);
+  }
+
+  .edu-glossary dt {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-sea);
+  }
+
+  .edu-glossary dd {
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--color-ink-soft);
+  }
+
+  .edu-callout {
+    margin: 0.9rem 0 0;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.55rem;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: var(--color-ink);
+    background: color-mix(in oklab, var(--color-amber) 14%, white);
+    border: 1px solid color-mix(in oklab, var(--color-amber) 28%, transparent);
+  }
+
+  .edu-disclaimer {
+    margin: 0.65rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--color-ink-soft);
   }
 
   .sr-only {
