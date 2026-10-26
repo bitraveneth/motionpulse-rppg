@@ -1,27 +1,22 @@
 import { useState } from 'react'
-import { shareRun, isSupabaseConfigured } from '../lib/feed/store'
-import type { RunRecord, RunSource } from '../lib/feed/types'
-import type { RiskLevel, RoiWeightsSummary } from '../lib/feed/types'
+import { api } from '../lib/api'
+import type { PublicFeedPost } from '../lib/feed/post'
 
 type Props = {
-  bpm: number
-  conflictScore: number
-  riskLevel: RiskLevel
-  roiWeights: RoiWeightsSummary
-  source: RunSource
+  settledHeartRate: number
+  respiratoryRate: number | null
+  signalLabel: string
+  risk: string
   thumbnailData?: string | null
-  sparkline?: string | null
-  onShared?: (run: RunRecord) => void
+  onShared?: (post: PublicFeedPost) => void
 }
 
 export function ShareToFeed({
-  bpm,
-  conflictScore,
-  riskLevel,
-  roiWeights,
-  source,
+  settledHeartRate,
+  respiratoryRate,
+  signalLabel,
+  risk,
   thumbnailData,
-  sparkline,
   onShared,
 }: Props) {
   const [nickname, setNickname] = useState('')
@@ -34,22 +29,19 @@ export function ShareToFeed({
     setError(null)
     setMessage(null)
     try {
-      const { run, mode } = await shareRun({
-        nickname,
-        bpm,
-        conflict_score: conflictScore,
-        risk_level: riskLevel,
-        roi_weights: roiWeights,
-        source,
-        thumbnail_data: thumbnailData ?? null,
-        sparkline: sparkline ?? null,
+      const { post } = await api<{ post: PublicFeedPost }>('/api/feed', {
+        method: 'POST',
+        body: JSON.stringify({
+          nickname,
+          settledHeartRate,
+          respiratoryRate,
+          signalLabel,
+          risk,
+          thumb: thumbnailData ?? null,
+        }),
       })
-      setMessage(
-        mode === 'supabase'
-          ? 'Shared to the public feed.'
-          : 'Saved to the local demo feed (Supabase not configured).',
-      )
-      onShared?.(run)
+      setMessage('Shared to the public feed.')
+      onShared?.(post)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not share')
     } finally {
@@ -58,13 +50,13 @@ export function ShareToFeed({
   }
 
   return (
-    <section className="share-panel" aria-label="Share to feed">
+    <section className="share-panel" aria-label="Share">
       <header className="panel-head">
-        <h2>Share to feed</h2>
+        <h2>Share</h2>
         <p>
-          Post metric summaries plus an optional tiny face thumb and pulse
-          sparkline. No face video is uploaded. Leave nickname blank for
-          Anonymous.
+          Post this result to the public feed: heart rate, experimental
+          respiratory rate, signal label, and risk, plus an optional nickname
+          and tiny face thumb. No video is uploaded.
         </p>
       </header>
 
@@ -86,16 +78,10 @@ export function ShareToFeed({
           onClick={() => void handleShare()}
           disabled={busy}
         >
-          {busy ? 'Sharing…' : 'Share to feed'}
+          {busy ? 'Sharing…' : 'Share'}
         </button>
       </div>
 
-      <p className="help-line">
-        Feed mode:{' '}
-        {isSupabaseConfigured()
-          ? 'Supabase (live)'
-          : 'localStorage mock — set VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY to go live'}
-      </p>
       {message && <p className="share-ok">{message}</p>}
       {error && (
         <p className="share-err" role="alert">

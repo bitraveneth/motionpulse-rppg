@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { CONTENT_DEFAULTS } from '../src/lib/contentDefaults'
+import { parseFeedPostInput } from '../src/lib/feed/post'
 import {
   createAuthSession,
   currentAccount,
@@ -195,6 +196,55 @@ app.post('/api/sessions/:id/clips', async (c) => {
     select: { id: true },
   })
   return c.json({ saved: true, id: clip.id })
+})
+
+const feedSelect = {
+  id: true,
+  createdAt: true,
+  nickname: true,
+  settledHeartRate: true,
+  respiratoryRate: true,
+  signalLabel: true,
+  risk: true,
+  thumb: true,
+} as const
+
+function publicFeedPost(row: {
+  id: string
+  createdAt: Date
+  nickname: string | null
+  settledHeartRate: number
+  respiratoryRate: number | null
+  signalLabel: string | null
+  risk: string | null
+  thumb: string | null
+}) {
+  return { ...row, createdAt: row.createdAt.toISOString() }
+}
+
+// Public result feed — newest first. Thumbs only; no video column.
+app.get('/api/feed', async (c) => {
+  const raw = Number(c.req.query('limit'))
+  const limit = Number.isFinite(raw) ? Math.min(48, Math.max(1, Math.floor(raw))) : 24
+  const rows = await prisma.feedPost.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: feedSelect,
+  })
+  return c.json({ posts: rows.map(publicFeedPost) })
+})
+
+// One share. The scan page calls this only when the person clicks Share.
+app.post('/api/feed', async (c) => {
+  const body = await readJson(c)
+  if (!body) return c.json({ error: 'JSON body required.' }, 400)
+  const parsed = parseFeedPostInput(body)
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+  const row = await prisma.feedPost.create({
+    data: parsed.data,
+    select: feedSelect,
+  })
+  return c.json({ post: publicFeedPost(row) })
 })
 
 // A signed-in subject sees only their own sessions.

@@ -23,6 +23,8 @@ type Props = {
   status: string
   /** Hide overlay source buttons when hero / nav already provides CTAs */
   showCtaBar?: boolean
+  /** Shown after a finished webcam capture so the camera can run again. */
+  onTryAgain?: () => void
 }
 
 /** Large monitoring surface: face video + detection box + timeline slider. */
@@ -43,6 +45,7 @@ export function MonitorStage({
   demoLoading = false,
   status,
   showCtaBar = true,
+  onTryAgain,
 }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const box = faceBoxFromLandmarks(landmarks)
@@ -238,6 +241,13 @@ export function MonitorStage({
       <p className="monitor-status" role="status">
         {status}
       </p>
+      {onTryAgain ? (
+        <div className="monitor-try-again">
+          <button type="button" className="cta cta-primary" onClick={onTryAgain}>
+            Try again
+          </button>
+        </div>
+      ) : null}
     </section>
   )
 }

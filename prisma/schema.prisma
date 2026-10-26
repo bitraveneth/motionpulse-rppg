@@ -98,3 +98,18 @@ model GroundTruth {
   datasetName      String?
   datasetSubjectId String?
 }
+
+// One public share. Metrics, time, optional nickname, optional tiny thumb.
+// Never a video file and never video bytes.
+model FeedPost {
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  nickname         String?
+  settledHeartRate Float
+  respiratoryRate  Float? // experimental
+  signalLabel      String?
+  risk             String?
+  thumb            String? // optional tiny data-url crop, never raw video
+
+  @@index([createdAt])
+}

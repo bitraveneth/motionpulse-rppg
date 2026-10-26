@@ -272,6 +272,10 @@
     color: var(--color-ink-soft);
   }
 
+  .monitor-try-again {
+    margin-top: 0.75rem;
+  }
+
   .queue-banner {
     margin: 0 0 0.75rem;
     padding: 0.55rem 0.85rem;

@@ -14,7 +14,9 @@ var CONTENT_DEFAULTS = {
   "home.how.step2.heading": "2. Track the face",
   "home.how.step2.body": "The app finds your face and samples color from forehead and cheek regions while you scrub the timeline.",
   "home.how.step3.heading": "3. Read the vitals",
-  "home.how.step3.body": "Heart rate updates as frames arrive. Signal trust shows when motion may have affected the estimate.",
+  "home.how.step3.body": "A webcam capture lasts 10 seconds, then the camera stops and heart rate, an experimental respiratory rate, and signal trust appear once.",
+  "home.feed.title": "Public results",
+  "home.feed.lead": "Shared scans list a heart rate, an experimental respiratory rate, the signal label, and risk. A small face thumb may appear. No video is stored.",
   "home.vitals.title": "What this camera reports",
   "home.vitals.note": "Blood oxygen and blood pressure are not measured here.",
   "home.demo.title": "Demo and Local lab",
@@ -24,6 +26,7 @@ var CONTENT_DEFAULTS = {
   "scan.offer_video_optin": "off",
   "site.maintenance_note": "",
   "nav.scan": "Scan",
+  "nav.feed": "Feed",
   "nav.how": "How it works",
   "nav.demo": "Demo",
   "nav.lab": "Local lab",
@@ -31,6 +34,81 @@ var CONTENT_DEFAULTS = {
   "cta.scan": "Scan yourself",
   "cta.sample": "Try sample"
 };
+
+// src/lib/feed/types.ts
+function normalizeNickname(nickname) {
+  const t = (nickname ?? "").trim();
+  return t.length > 0 ? t.slice(0, 40) : null;
+}
+
+// src/lib/feed/post.ts
+var RISKS = /* @__PURE__ */ new Set(["low", "moderate", "elevated", "high"]);
+var THUMB_MAX_CHARS = 12e4;
+var THUMB_RE = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
+function round1(n) {
+  return Math.round(n * 10) / 10;
+}
+function finite(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+function parseFeedPostInput(body) {
+  const heart = finite(body.settledHeartRate);
+  if (heart === null || heart < 20 || heart > 260) {
+    return { ok: false, error: "Settled heart rate must be between 20 and 260." };
+  }
+  let respiratoryRate = null;
+  if (body.respiratoryRate !== null && body.respiratoryRate !== void 0) {
+    const breath = finite(body.respiratoryRate);
+    if (breath === null || breath < 2 || breath > 80) {
+      return {
+        ok: false,
+        error: "Respiratory rate must be between 2 and 80, or omitted."
+      };
+    }
+    respiratoryRate = round1(breath);
+  }
+  if (typeof body.signalLabel !== "string" || !body.signalLabel.trim()) {
+    return { ok: false, error: "Signal label is required." };
+  }
+  const signalLabel = body.signalLabel.trim().slice(0, 80);
+  if (typeof body.risk !== "string" || !RISKS.has(body.risk)) {
+    return { ok: false, error: "Risk must be low, moderate, elevated, or high." };
+  }
+  const thumb = parseThumb(body.thumb);
+  if (!thumb.ok) return thumb;
+  return {
+    ok: true,
+    data: {
+      nickname: normalizeNickname(
+        typeof body.nickname === "string" ? body.nickname : null
+      ),
+      settledHeartRate: round1(heart),
+      respiratoryRate,
+      signalLabel,
+      risk: body.risk,
+      thumb: thumb.thumb
+    }
+  };
+}
+function parseThumb(v) {
+  if (v == null || v === "") return { ok: true, thumb: null };
+  if (typeof v !== "string") {
+    return { ok: false, error: "Thumb must be a small image." };
+  }
+  const t = v.trim();
+  if (!t) return { ok: true, thumb: null };
+  const head = t.slice(0, 40).toLowerCase();
+  if (head.startsWith("data:video") || head.includes("video/")) {
+    return { ok: false, error: "Video is not stored." };
+  }
+  if (!THUMB_RE.test(t)) {
+    return { ok: false, error: "Thumb must be a small JPEG, PNG, or WebP image." };
+  }
+  if (t.length > THUMB_MAX_CHARS) {
+    return { ok: false, error: "Thumb is too large." };
+  }
+  return { ok: true, thumb: t };
+}
 
 // server/auth.ts
 import crypto from "node:crypto";
@@ -322,6 +400,40 @@ app.post("/api/sessions/:id/clips", async (c) => {
     select: { id: true }
   });
   return c.json({ saved: true, id: clip.id });
+});
+var feedSelect = {
+  id: true,
+  createdAt: true,
+  nickname: true,
+  settledHeartRate: true,
+  respiratoryRate: true,
+  signalLabel: true,
+  risk: true,
+  thumb: true
+};
+function publicFeedPost(row) {
+  return { ...row, createdAt: row.createdAt.toISOString() };
+}
+app.get("/api/feed", async (c) => {
+  const raw = Number(c.req.query("limit"));
+  const limit = Number.isFinite(raw) ? Math.min(48, Math.max(1, Math.floor(raw))) : 24;
+  const rows = await prisma.feedPost.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: feedSelect
+  });
+  return c.json({ posts: rows.map(publicFeedPost) });
+});
+app.post("/api/feed", async (c) => {
+  const body = await readJson(c);
+  if (!body) return c.json({ error: "JSON body required." }, 400);
+  const parsed = parseFeedPostInput(body);
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
+  const row = await prisma.feedPost.create({
+    data: parsed.data,
+    select: feedSelect
+  });
+  return c.json({ post: publicFeedPost(row) });
 });
 app.get("/api/me/sessions", async (c) => {
   const account = await currentAccount(c);

@@ -16,7 +16,10 @@ export const CONTENT_DEFAULTS: Record<string, string> = {
     'The app finds your face and samples color from forehead and cheek regions while you scrub the timeline.',
   'home.how.step3.heading': '3. Read the vitals',
   'home.how.step3.body':
-    'Heart rate updates as frames arrive. Signal trust shows when motion may have affected the estimate.',
+    'A webcam capture lasts 10 seconds, then the camera stops and heart rate, an experimental respiratory rate, and signal trust appear once.',
+  'home.feed.title': 'Public results',
+  'home.feed.lead':
+    'Shared scans list a heart rate, an experimental respiratory rate, the signal label, and risk. A small face thumb may appear. No video is stored.',
   'home.vitals.title': 'What this camera reports',
   'home.vitals.note': 'Blood oxygen and blood pressure are not measured here.',
   'home.demo.title': 'Demo and Local lab',
@@ -26,6 +29,7 @@ export const CONTENT_DEFAULTS: Record<string, string> = {
   'scan.offer_video_optin': 'off',
   'site.maintenance_note': '',
   'nav.scan': 'Scan',
+  'nav.feed': 'Feed',
   'nav.how': 'How it works',
   'nav.demo': 'Demo',
   'nav.lab': 'Local lab',
