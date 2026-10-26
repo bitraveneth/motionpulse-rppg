@@ -1,6 +1,9 @@
 /** Marketing sections below the hero — factual, not medical claims. */
 
+import { useContent } from '../lib/content'
+
 export function HowItWorksSection() {
+  const c = useContent()
   return (
     <section
       id="how-it-works"
@@ -8,28 +11,19 @@ export function HowItWorksSection() {
       aria-labelledby="how-it-works-title"
     >
       <div className="site-section-inner">
-        <h2 id="how-it-works-title">How a session works</h2>
+        <h2 id="how-it-works-title">{c('home.how.title')}</h2>
         <ol className="home-steps">
           <li className="home-card">
-            <h3>1. Add a face clip</h3>
-            <p>
-              Open the scan page, then use your webcam, upload a short video, or
-              run the built-in sample. Video stays on this device.
-            </p>
+            <h3>{c('home.how.step1.heading')}</h3>
+            <p>{c('home.how.step1.body')}</p>
           </li>
           <li className="home-card">
-            <h3>2. Track the face</h3>
-            <p>
-              The app finds your face and samples color from forehead and cheek
-              regions while you scrub the timeline.
-            </p>
+            <h3>{c('home.how.step2.heading')}</h3>
+            <p>{c('home.how.step2.body')}</p>
           </li>
           <li className="home-card">
-            <h3>3. Read the vitals</h3>
-            <p>
-              Heart rate updates as frames arrive. Signal trust shows when motion
-              may have affected the estimate.
-            </p>
+            <h3>{c('home.how.step3.heading')}</h3>
+            <p>{c('home.how.step3.body')}</p>
           </li>
         </ol>
       </div>
@@ -38,6 +32,7 @@ export function HowItWorksSection() {
 }
 
 export function VitalsExplainerSection() {
+  const c = useContent()
   return (
     <section
       id="vitals"
@@ -45,7 +40,7 @@ export function VitalsExplainerSection() {
       aria-labelledby="vitals-title"
     >
       <div className="site-section-inner">
-        <h2 id="vitals-title">What this camera reports</h2>
+        <h2 id="vitals-title">{c('home.vitals.title')}</h2>
         <div className="home-report-grid">
           <article className="home-card">
             <span className="home-card-label">Heart rate</span>
@@ -69,9 +64,7 @@ export function VitalsExplainerSection() {
             </p>
           </article>
         </div>
-        <p className="home-not-measured">
-          Blood oxygen and blood pressure are not measured here.
-        </p>
+        <p className="home-not-measured">{c('home.vitals.note')}</p>
       </div>
     </section>
   )

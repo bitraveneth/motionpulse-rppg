@@ -122,6 +122,27 @@ npm run publish-results
 
 Posts rows from `out/batch-results.json` to Supabase when keys are set; otherwise prints setup instructions. The in-app **Publish summaries online** button uses the same metric-only payload (and falls back to the mock feed without keys). **Never uploads video.**
 
+## Admin backend (Prisma + Hono API)
+
+The `/admin` area (content editor, users, sessions, ground truth, CSV/JSON export) and the optional subject sign-in run on one Prisma Postgres database with a Hono API. In dev, Vite mounts the API at `/api/*`; on Vercel the same app runs as a serverless function (`api/index.ts`).
+
+Local setup:
+
+```bash
+cp .env.example .env   # fill DATABASE_URL (+ DIRECT_URL only if migrate needs it) and AUTH_SECRET
+npx prisma migrate dev
+npm run db:seed        # seeds one admin (prints a random password) + default copy
+npm run dev            # admin at http://127.0.0.1:4731/admin
+```
+
+Passwords are hashed with Node `crypto.scrypt`; sign-in uses an httpOnly cookie session.
+
+### Deploy to Vercel (later)
+
+- Framework preset: **Vite** (build `npm run build`, output `dist`). `vercel.json` routes `/api/*` to the function and falls back to `index.html` for the SPA.
+- Env vars to set in the Vercel dashboard: `DATABASE_URL` (pooled Prisma Postgres), `AUTH_SECRET` (random hex). `DIRECT_URL` only if migrations need the non-pooled host. No other secrets — do **not** put connection strings in the repo or README.
+- `postinstall` runs `prisma generate`; apply migrations from a machine that has the env (`npx prisma migrate deploy`).
+
 ## Privacy
 
 - Face video and webcam frames stay in the browser (or on your local batch machine).

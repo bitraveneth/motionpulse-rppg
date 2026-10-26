@@ -6,11 +6,13 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
+import { app as apiApp } from './server/app.ts'
 
 const DEMO_CLIPS_DIR = resolve(process.cwd(), 'public/demo-clips')
 const DEMO_VIDEO_RE = /\.(mp4|webm|mov|m4v)$/i
@@ -98,8 +100,76 @@ function localLabBatchPlugin(): Plugin {
   }
 }
 
+function readRequestBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolveBody, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    req.on('end', () => resolveBody(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
+
+/** Dev: mount the same Hono app Vercel runs for /api/* (registered last). */
+function motionPulseApiPlugin(): Plugin {
+  return {
+    name: 'motionpulse-api',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = req.url?.split('?')[0] ?? ''
+        if (!path.startsWith('/api/')) {
+          next()
+          return
+        }
+        handleApiRequest(req, res).catch((e) => {
+          console.error('[api]', e)
+          if (!res.headersSent) {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+          }
+          res.end(JSON.stringify({ error: 'api_error' }))
+        })
+      })
+    },
+  }
+}
+
+async function handleApiRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const origin = `http://${req.headers.host ?? '127.0.0.1'}`
+  const url = new URL(req.url ?? '/', origin)
+  const headers = new Headers()
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (Array.isArray(value)) {
+      for (const v of value) headers.append(key, v)
+    } else if (value !== undefined) {
+      headers.set(key, value)
+    }
+  }
+  const method = req.method ?? 'GET'
+  const body = method === 'GET' || method === 'HEAD' ? undefined : await readRequestBody(req)
+  const request = new Request(url, { method, headers, body })
+  const response = await apiApp.fetch(request)
+  res.statusCode = response.status
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() !== 'set-cookie') res.setHeader(key, value)
+  })
+  const setCookies = response.headers.getSetCookie()
+  if (setCookies.length > 0) res.setHeader('set-cookie', setCookies)
+  const payload = Buffer.from(await response.arrayBuffer())
+  res.setHeader('content-length', payload.length)
+  res.end(payload)
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), localLabBatchPlugin(), demoClipsPlugin()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    localLabBatchPlugin(),
+    demoClipsPlugin(),
+    motionPulseApiPlugin(),
+  ],
   server: {
     host: '0.0.0.0',
     port: 4731,

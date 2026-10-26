@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useContent } from '../lib/content'
 type Props = {
   /** Primary pill CTA label */
   primaryCta?: { label: string; to: string }
@@ -9,6 +10,8 @@ export function SiteNav({ primaryCta }: Props) {
   const [open, setOpen] = useState(false)
   const location = useLocation()
   const onHome = location.pathname === '/'
+  const c = useContent()
+  const maintenance = c('site.maintenance_note', '').trim()
 
   useEffect(() => {
     if (!open) return
@@ -28,13 +31,14 @@ export function SiteNav({ primaryCta }: Props) {
   }
 
   const links = [
-    { to: '/scan', label: 'Scan' },
-    { to: sectionHref('how-it-works'), label: 'How it works' },
-    { to: sectionHref('demo-tools'), label: 'Demo' },
-    { to: sectionHref('local-lab'), label: 'Local lab' },
+    { to: '/scan', label: c('nav.scan') },
+    { to: sectionHref('how-it-works'), label: c('nav.how') },
+    { to: sectionHref('demo-tools'), label: c('nav.demo') },
+    { to: sectionHref('local-lab'), label: c('nav.lab') },
+    { to: '/signin', label: c('nav.signin') },
   ]
 
-  const cta = primaryCta ?? { label: 'Try sample', to: '/scan?action=sample' }
+  const cta = primaryCta ?? { label: c('cta.sample'), to: '/scan?action=sample' }
 
   return (
     <header className="site-nav-pill-wrap">
@@ -60,7 +64,7 @@ export function SiteNav({ primaryCta }: Props) {
           <ul className="site-nav-links">
             {links.map((l) => (
               <li key={l.label}>
-                {l.to.startsWith('/scan') ? (
+                {l.to.startsWith('/') && !l.to.startsWith('/#') ? (
                   <Link to={l.to} onClick={close}>{l.label}</Link>
                 ) : (
                   <a href={l.to} onClick={close}>{l.label}</a>
@@ -77,6 +81,11 @@ export function SiteNav({ primaryCta }: Props) {
           </Link>
         </div>
       </nav>
+      {maintenance ? (
+        <p className="maintenance-note" role="status">
+          {maintenance}
+        </p>
+      ) : null}
     </header>
   )
 }

@@ -3,9 +3,14 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
+  "prisma": {
+    "seed": "tsx server/seed.ts"
+  },
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "db:seed": "tsx server/seed.ts",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
@@ -15,6 +20,9 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.1.1",
+    "@prisma/client": "^6.19.3",
+    "dotenv": "^18.0.9",
+    "hono": "^4.13.14",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4"
@@ -26,6 +34,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "prisma": "^6.19.3",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "~6.0.2",

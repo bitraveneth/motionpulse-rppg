@@ -7,28 +7,24 @@ import {
   VitalsExplainerSection,
 } from '../components/SiteSections'
 import { isLocalLabEnabled } from '../lib/lab/enabled'
+import { useContent } from '../lib/content'
 import { useState } from 'react'
 
 export function HomePage() {
   const labEnabled = isLocalLabEnabled()
   const [, setFeedTick] = useState(0)
+  const c = useContent()
 
   return (
     <>
-      <SiteNav primaryCta={{ label: 'Scan yourself', to: '/scan' }} />
+      <SiteNav primaryCta={{ label: c('cta.scan'), to: '/scan' }} />
 
       <main className="home-page" id="top">
         <section className="home-hero" aria-labelledby="home-hero-title">
           <div className="home-hero-inner">
             <div className="home-hero-copy">
-              <h1 id="home-hero-title">
-                Heart rate from a face video, in your browser
-              </h1>
-              <p className="home-hero-lead">
-                MotionPulse estimates pulse from ordinary camera footage and
-                flags when motion may affect the number. For learning and
-                research — not a medical device.
-              </p>
+              <h1 id="home-hero-title">{c('home.headline')}</h1>
+              <p className="home-hero-lead">{c('home.lead')}</p>
               <div className="home-hero-actions">
                 <Link to="/scan" className="cta cta-primary">
                   Scan yourself
@@ -51,7 +47,7 @@ export function HomePage() {
           aria-labelledby="demo-tools-title"
         >
           <div className="site-section-inner">
-            <h2 id="demo-tools-title">Demo and Local lab</h2>
+            <h2 id="demo-tools-title">{c('home.demo.title')}</h2>
             <div className="home-lab-grid">
               <article className="home-card">
                 <h3 className="home-card-heading">Demo</h3>
@@ -91,9 +87,7 @@ export function HomePage() {
       </main>
 
       <footer className="site-foot">
-        <p className="site-foot-research">
-          Educational remote-PPG demo — not a medical device.
-        </p>
+        <p className="site-foot-research">{c('footer.line')}</p>
       </footer>
     </>
   )

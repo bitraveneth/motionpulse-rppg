@@ -15,6 +15,8 @@ import { RegionTrustLines } from '../components/RegionTrustLines'
 import { ScanVitalCards } from '../components/ScanVitalCards'
 import { VitalsScanRow } from '../components/VitalsScanRow'
 import { SiteNav } from '../components/SiteNav'
+import { useContent } from '../lib/content'
+import { resetScanSave, saveSettledClip } from '../lib/saveScan'
 import { useSearchParams } from 'react-router-dom'
 import {
   detectVideoFrame,
@@ -76,6 +78,7 @@ function newId() {
 
 export function ScanPage() {
   const [searchParams] = useSearchParams()
+  const c = useContent()
   const [controls, setControls] = useState<DemoControls>(DEFAULT_CONTROLS)
   const [inputMode, setInputMode] = useState<InputMode>('synthetic')
   const [status, setStatus] = useState(
@@ -230,6 +233,9 @@ export function ScanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Leaving the scan page ends the server-side scan session too.
+  useEffect(() => () => resetScanSave(), [])
+
   // Deep-link from marketing home: /scan?action=sample|upload|webcam
   useEffect(() => {
     const action = searchParams.get('action')
@@ -291,6 +297,7 @@ export function ScanPage() {
     pendingFilesRef.current.clear()
     queueOrderRef.current = []
     setQueueLeft(0)
+    resetScanSave()
   }
 
   async function attachVideoUrl(url: string | null, seekFrac = 0.5) {
@@ -474,6 +481,19 @@ export function ScanPage() {
     })
     setActiveSessionId(entry.id)
     appliedSessionIdRef.current = entry.id
+    saveSettledClip({
+      source: 'sample',
+      pipeline,
+      settledBpm: pipeline?.gatedBpm ?? null,
+      respiratoryBpm: breath ? breath.breathsPerMin : null,
+      riskLevel: risk?.level ?? null,
+      signalLabel: risk?.label ?? null,
+      durationSec: buffer.frames.length / buffer.sampleRateHz,
+      fps: buffer.sampleRateHz,
+      width: null,
+      height: null,
+      thumbnail: entry.thumbnail,
+    })
   }
 
   async function handleInputMode(mode: InputMode) {
@@ -698,6 +718,8 @@ export function ScanPage() {
     buffer: LiveBuffer
     objectUrl: string
     durationSec: number
+    width: number
+    height: number
   } | null> {
     if (!file.type.startsWith('video/') && !/\.(mp4|webm|mov|m4v|avi)$/i.test(file.name)) {
       setError('Please choose a video file (MP4, WebM, or MOV work best).')
@@ -883,6 +905,8 @@ export function ScanPage() {
         buffer,
         objectUrl: url,
         durationSec,
+        width: optimized.width,
+        height: optimized.height,
       }
     } catch (e) {
       const message =
@@ -975,14 +999,35 @@ export function ScanPage() {
 
         const outcome = await handleUpload(file, clipId)
         if (outcome) {
-          const { pipeline, thumbnail, fps, buffer, objectUrl, durationSec } =
-            outcome
+          const {
+            pipeline,
+            thumbnail,
+            fps,
+            buffer,
+            objectUrl,
+            durationSec,
+            width,
+            height,
+          } = outcome
           const riskLabel = conflictRiskLabel(pipeline.conflict.combined)
           const series =
             pipeline.suppression.gated.length > 24
               ? pipeline.suppression.gated
               : pipeline.motion.global
           const breath = estimateRespiratoryRate(series, fps)
+          saveSettledClip({
+            source: 'upload',
+            pipeline,
+            settledBpm: pipeline.gatedBpm,
+            respiratoryBpm: breath ? breath.breathsPerMin : null,
+            riskLevel: riskLabel.level,
+            signalLabel: riskLabel.label,
+            durationSec,
+            fps,
+            width,
+            height,
+            thumbnail,
+          })
           const done: SessionRun = {
             id: clipId,
             name: shortClipName(file.name),
@@ -1047,7 +1092,7 @@ export function ScanPage() {
 
   return (
     <>
-      <SiteNav primaryCta={{ label: 'Scan yourself', to: '/scan' }} />
+      <SiteNav primaryCta={{ label: c('cta.scan'), to: '/scan' }} />
 
       <main className="scan-page" id="monitor">
         <header className="scan-page-head">
@@ -1377,9 +1422,7 @@ export function ScanPage() {
             Last clip: {uploadName}. Face video stays in your browser.
           </p>
         ) : null}
-        <p className="site-foot-research">
-          Educational scan demo — not a medical device.
-        </p>
+        <p className="site-foot-research">{c('scan.disclaimer')}</p>
       </footer>
     </>
   )

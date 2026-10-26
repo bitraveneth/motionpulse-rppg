@@ -1,0 +1,100 @@
+// MotionPulse admin backend — one database (Prisma Postgres).
+// Numbers, short traces, consent, optional tiny thumbs. Never raw video.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // directUrl = env("DIRECT_URL") — uncomment if prisma migrate needs the non-pooled host
+}
+
+model Account {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  name         String?
+  passwordHash String
+  role         String          @default("subject") // admin | subject
+  status       String          @default("active") // active | disabled
+  createdAt    DateTime        @default(now())
+  profile      SubjectProfile?
+  authSessions AuthSession[]
+  scanSessions ScanSession[]
+}
+
+model SubjectProfile {
+  id               String    @id @default(cuid())
+  accountId        String    @unique
+  account          Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ageBand          String?
+  note             String?
+  consentMetricsAt DateTime?
+  consentVideo     Boolean   @default(false)
+  consentVideoAt   DateTime?
+}
+
+model AuthSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([accountId])
+}
+
+model Content {
+  key       String   @id
+  text      String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model ScanSession {
+  id              String    @id @default(cuid())
+  createdAt       DateTime  @default(now())
+  source          String // sample | upload | webcam | local-lab
+  nickname        String?
+  pipelineVersion String?
+  userId          String?
+  user            Account?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clips           Clip[]
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model Clip {
+  id               String        @id @default(cuid())
+  sessionId        String
+  session          ScanSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  index            Int           @default(0)
+  durationSec      Float?
+  fps              Float?
+  width            Int?
+  height           Int?
+  settledHeartRate Float?
+  rawBpm           Float?
+  respiratoryRate  Float? // experimental
+  signalLabel      String?
+  risk             String?
+  regionWeights    Float[] // forehead, left cheek, right cheek, lower face
+  waveform         Float[] // short downsampled pulse trace
+  thumb            String? // optional tiny data-url crop, never raw video
+  groundTruth      GroundTruth?
+
+  @@index([sessionId])
+}
+
+model GroundTruth {
+  id               String  @id @default(cuid())
+  clipId           String  @unique
+  clip             Clip    @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  heartRate        Float
+  source           String // self-count | dataset | device
+  datasetName      String?
+  datasetSubjectId String?
+}

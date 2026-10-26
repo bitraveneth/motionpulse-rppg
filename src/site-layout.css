@@ -1410,3 +1410,16 @@
     }
   }
 }
+
+/* Maintenance note from the Content table (blank = hidden). */
+.maintenance-note {
+  margin: 0.75rem auto 0;
+  max-width: 720px;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  background: #fdf6e3;
+  border: 1px solid #e8d9a8;
+  color: #6b4e12;
+  font-size: 0.85rem;
+  text-align: center;
+}
