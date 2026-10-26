@@ -1,7 +1,10 @@
 import type { FrameLandmarks } from '../rppg/types'
 
-/** Lower forehead. The hairline point is left out so hair alone is not a cap. */
+/** Lower forehead. Skin here means the brim has not covered the face yet. */
 export const HAT_FOREHEAD_INDICES = [151, 108, 337, 69, 299, 104, 333, 67, 298]
+
+/** Hairline. A cap or brim covers this row even when the lower forehead is still skin. */
+export const HAT_CAP_LINE_INDICES = [10, 109, 338, 67, 297, 103, 332]
 
 /** Cheek points used as this person's skin color. */
 export const HAT_CHEEK_INDICES = [50, 101, 118, 205, 280, 330, 347, 425]
@@ -13,12 +16,16 @@ export const HAT_NO_FACE_FRAMES = 45
 
 export type Rgb = { r: number; g: number; b: number }
 
+export type HatBlockReason = 'hat' | 'face'
+
 export type HatGateState = {
   covered: boolean | null
   coveredStreak: number
   clearStreak: number
   noFaceFrames: number
   prompt: boolean
+  /** Why the banner is up. Null when the scan may start. */
+  reason: HatBlockReason | null
   skip: boolean
 }
 
@@ -70,6 +77,30 @@ export function foreheadLooksCovered(
   return likeSkin / forehead.length < 0.4
 }
 
+/**
+ * True when the hairline row is a flat or dark cover, such as a brim.
+ * A varied hairline is left alone. Not enough pixels returns false.
+ */
+export function capLineLooksCovered(capLine: Rgb[], cheeks: Rgb[]): boolean {
+  if (capLine.length < 4 || cheeks.length < 6) return false
+  const cheek = averageChroma(cheeks)
+  if (cheek.y < 30) return false
+  let unlikeSkin = 0
+  const brightness: number[] = []
+  for (const pixel of capLine) {
+    const c = rgbChroma(pixel)
+    brightness.push(c.y)
+    const distance = Math.hypot(c.cb - cheek.cb, c.cr - cheek.cr)
+    const darker = c.y < cheek.y * 0.62
+    if (distance > 20 || darker) unlikeSkin += 1
+  }
+  if (unlikeSkin / capLine.length < 0.7) return false
+  const mean = brightness.reduce((sum, y) => sum + y, 0) / brightness.length
+  const variance =
+    brightness.reduce((sum, y) => sum + (y - mean) ** 2, 0) / brightness.length
+  return variance < 500 || mean < cheek.y * 0.55
+}
+
 /** Advance the "ask only if a cap is visible" gate by one camera frame. */
 export function nextHatGate(state: HatGateState): HatGateState & { start: boolean } {
   if (state.skip) {
@@ -79,27 +110,33 @@ export function nextHatGate(state: HatGateState): HatGateState & { start: boolea
       clearStreak: 0,
       noFaceFrames: 0,
       prompt: false,
+      reason: null,
       skip: true,
       start: true,
     }
   }
   if (state.covered === null) {
     const noFaceFrames = state.noFaceFrames + 1
+    const ask = state.prompt || noFaceFrames >= HAT_NO_FACE_FRAMES
     return {
       ...state,
       coveredStreak: 0,
       noFaceFrames,
-      start: !state.prompt && noFaceFrames >= HAT_NO_FACE_FRAMES,
+      prompt: ask,
+      reason: ask ? (state.reason === 'hat' ? 'hat' : 'face') : null,
+      start: false,
     }
   }
   if (state.covered) {
     const coveredStreak = state.coveredStreak + 1
+    const ask = state.prompt || coveredStreak >= HAT_COVERED_FRAMES
     return {
       ...state,
       coveredStreak,
       clearStreak: 0,
       noFaceFrames: 0,
-      prompt: state.prompt || coveredStreak >= HAT_COVERED_FRAMES,
+      prompt: ask,
+      reason: ask ? 'hat' : null,
       start: false,
     }
   }
@@ -111,6 +148,7 @@ export function nextHatGate(state: HatGateState): HatGateState & { start: boolea
     clearStreak,
     noFaceFrames: 0,
     prompt: start ? false : state.prompt,
+    reason: start ? null : state.reason,
     start,
   }
 }
@@ -159,8 +197,25 @@ export function foreheadCoveredInFrame(
   height: number,
   landmarks: FrameLandmarks,
 ): boolean | null {
-  return foreheadLooksCovered(
-    sampleLandmarkColors(data, width, height, landmarks, HAT_FOREHEAD_INDICES),
-    sampleLandmarkColors(data, width, height, landmarks, HAT_CHEEK_INDICES),
+  const cheeks = sampleLandmarkColors(
+    data,
+    width,
+    height,
+    landmarks,
+    HAT_CHEEK_INDICES,
   )
+  const forehead = foreheadLooksCovered(
+    sampleLandmarkColors(data, width, height, landmarks, HAT_FOREHEAD_INDICES),
+    cheeks,
+  )
+  if (forehead === true) return true
+  if (
+    capLineLooksCovered(
+      sampleLandmarkColors(data, width, height, landmarks, HAT_CAP_LINE_INDICES),
+      cheeks,
+    )
+  ) {
+    return true
+  }
+  return forehead
 }

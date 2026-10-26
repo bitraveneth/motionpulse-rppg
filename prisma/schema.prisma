@@ -106,6 +106,10 @@ model FeedPost {
   videoMime       String?
   videoBytes      Bytes?
   hasVideo        Boolean  @default(false)
+  /// Hidden posts stay in the database and drop off the public feed.
+  hidden          Boolean  @default(false)
+  /// The post can stay public while the face video stays off the feed.
+  videoHidden     Boolean  @default(false)
   userId          String?
   /// Motion, spectrum, and trust summaries. Null on older posts.
   detail          Json?

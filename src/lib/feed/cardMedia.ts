@@ -6,9 +6,13 @@
 import type { FrameLandmarks } from '../rppg/types'
 
 export const THUMB_MAX_BYTES = 80_000
-export const THUMB_SIZE_PX = 160
+/** Longest edge of a saved face still. The crop itself is portrait, not square. */
+export const THUMB_SIZE_PX = 320
 export const SPARKLINE_W = 96
 export const SPARKLINE_H = 28
+
+/** Chin, lips, and forehead. Always included so a sampled subset cannot drop the mouth. */
+const FACE_EDGE_INDICES = [10, 152, 0, 13, 14, 17, 61, 291, 33, 263]
 
 /** Downsample a series and emit an SVG path (viewBox 0 0 SPARKLINE_W SPARKLINE_H). */
 export function buildSparklinePath(
@@ -73,19 +77,20 @@ export function captureFaceThumbnail(
 ): string | null {
   if (!source.width || !source.height) return null
 
-  const sizePx = opts.sizePx ?? THUMB_SIZE_PX
-  const blurPx = opts.blurPx ?? 0.8
-  const quality = opts.quality ?? 0.72
+  const maxEdge = opts.sizePx ?? THUMB_SIZE_PX
+  const blurPx = opts.blurPx ?? 0
+  const quality = opts.quality ?? 0.82
 
-  const box = faceBounds(landmarks, source.width, source.height)
+  const box = faceThumbBounds(landmarks, source.width, source.height)
+  const scale = maxEdge / Math.max(box.sw, box.sh)
   const out = document.createElement('canvas')
-  out.width = sizePx
-  out.height = sizePx
+  out.width = Math.max(2, Math.round(box.sw * scale))
+  out.height = Math.max(2, Math.round(box.sh * scale))
   const ctx = out.getContext('2d')
   if (!ctx) return null
 
-  ctx.fillStyle = '#d9e8f0'
-  ctx.fillRect(0, 0, sizePx, sizePx)
+  ctx.fillStyle = '#0c2233'
+  ctx.fillRect(0, 0, out.width, out.height)
 
   if (blurPx > 0) {
     ctx.filter = `blur(${blurPx}px)`
@@ -98,8 +103,8 @@ export function captureFaceThumbnail(
     box.sh,
     0,
     0,
-    sizePx,
-    sizePx,
+    out.width,
+    out.height,
   )
   ctx.filter = 'none'
 
@@ -137,12 +142,13 @@ export function compressDataUrl(
 
   if (approxBytes(data) > THUMB_MAX_BYTES) {
     const small = document.createElement('canvas')
-    small.width = 128
-    small.height = 128
+    const scaleDown = Math.min(1, 220 / Math.max(canvas.width, canvas.height))
+    small.width = Math.max(2, Math.round(canvas.width * scaleDown))
+    small.height = Math.max(2, Math.round(canvas.height * scaleDown))
     const sctx = small.getContext('2d')
     if (sctx) {
-      sctx.drawImage(canvas, 0, 0, 128, 128)
-      data = bestOf(small, 0.55) ?? data
+      sctx.drawImage(canvas, 0, 0, small.width, small.height)
+      data = bestOf(small, 0.62) ?? data
     }
   }
 
@@ -156,55 +162,76 @@ function approxBytes(dataUrl: string): number {
   return Math.ceil((b64.length * 3) / 4)
 }
 
-function faceBounds(
+export type ThumbBox = { sx: number; sy: number; sw: number; sh: number }
+
+/**
+ * Portrait crop around the whole face. Extra room under the chin so the
+ * lips are not the edge of the picture. If that crop cannot fit, the
+ * full frame is used instead of slicing the jaw off to make a square.
+ */
+export function faceThumbBounds(
   landmarks: FrameLandmarks | null | undefined,
   width: number,
   height: number,
-): { sx: number; sy: number; sw: number; sh: number } {
-  if (!landmarks || landmarks.length < 8) {
-    // Center square crop as fallback
-    const side = Math.min(width, height) * 0.55
-    return {
-      sx: (width - side) / 2,
-      sy: (height - side) / 2,
-      sw: side,
-      sh: side,
-    }
-  }
+): ThumbBox {
+  if (width < 2 || height < 2) return { sx: 0, sy: 0, sw: width, sh: height }
+  if (!landmarks || landmarks.length < 8) return fullFrame(width, height)
 
   let minX = 1
   let minY = 1
   let maxX = 0
   let maxY = 0
-  // Sample a subset for speed / stability (oval of the face)
-  const step = Math.max(1, Math.floor(landmarks.length / 80))
-  for (let i = 0; i < landmarks.length; i += step) {
-    const p = landmarks[i]!
+  const consider = (p: { x: number; y: number } | undefined) => {
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return
     if (p.x < minX) minX = p.x
     if (p.y < minY) minY = p.y
     if (p.x > maxX) maxX = p.x
     if (p.y > maxY) maxY = p.y
   }
+  const step = Math.max(1, Math.floor(landmarks.length / 80))
+  for (let i = 0; i < landmarks.length; i += step) consider(landmarks[i])
+  for (const index of FACE_EDGE_INDICES) consider(landmarks[index])
 
-  const pad = 0.12
-  const cx = (minX + maxX) / 2
-  const cy = (minY + maxY) / 2
-  let half = Math.max(maxX - minX, maxY - minY) / 2
-  half *= 1 + pad
-  half = Math.max(half, 0.12)
+  if (maxX <= minX || maxY <= minY) return fullFrame(width, height)
 
-  let sx = (cx - half) * width
-  let sy = (cy - half) * height
-  let sw = half * 2 * width
-  let sh = half * 2 * height
+  const faceW = maxX - minX
+  const faceH = maxY - minY
+  let x0 = minX - faceW * 0.22
+  let x1 = maxX + faceW * 0.22
+  let y0 = minY - faceH * 0.32
+  let y1 = maxY + faceH * 0.42
 
-  // Clamp to canvas
+  let sx = x0 * width
+  let sy = y0 * height
+  let sw = (x1 - x0) * width
+  let sh = (y1 - y0) * height
+
+  // 3:4 portrait. Grow the short side; do not crop the mouth to force it.
+  const portrait = 4 / 3
+  if (sh / Math.max(sw, 1) < portrait) {
+    const need = sw * portrait
+    const extra = need - sh
+    sy -= extra * 0.35
+    sh = need
+  } else {
+    const need = sh / portrait
+    const extra = need - sw
+    sx -= extra / 2
+    sw = need
+  }
+
+  if (sw > width || sh > height) return fullFrame(width, height)
+
   if (sx < 0) sx = 0
   if (sy < 0) sy = 0
-  if (sx + sw > width) sw = width - sx
-  if (sy + sh > height) sh = height - sy
-  const side = Math.min(sw, sh)
-  return { sx, sy, sw: side, sh: side }
+  if (sx + sw > width) sx = width - sw
+  if (sy + sh > height) sy = height - sh
+
+  return { sx, sy, sw, sh }
+}
+
+function fullFrame(width: number, height: number): ThumbBox {
+  return { sx: 0, sy: 0, sw: width, sh: height }
 }
 
 /** Prefer URL over inline data when both exist. */

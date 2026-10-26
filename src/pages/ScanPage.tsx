@@ -31,7 +31,7 @@ import {
 import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
 import { runPipeline, type PipelineResult } from '../lib/rppg/pipeline'
 import { conflictRiskLabel } from '../lib/rppg/conflict'
-import { estimateShownBreath } from '../lib/rppg/respiratory'
+import { estimateShownBreath, faceGreenSeries } from '../lib/rppg/respiratory'
 import { generateSyntheticSample } from '../lib/rppg/synthetic'
 import { paintSyntheticPreview } from '../lib/rppg/syntheticPreview'
 import {
@@ -48,7 +48,12 @@ import {
   preferredRecorderMime,
   secondsLeft,
 } from '../lib/video/captureClock'
-import { foreheadCoveredInFrame, nextHatGate } from '../lib/video/hatDetect'
+import {
+  HAT_COVERED_FRAMES,
+  foreheadCoveredInFrame,
+  nextHatGate,
+  type HatBlockReason,
+} from '../lib/video/hatDetect'
 import { optimizeVideoFile } from '../lib/video/optimize'
 import { streamAnalyzeVideo } from '../lib/video/streamAnalyze'
 import type { RunSource } from '../lib/feed/types'
@@ -101,6 +106,8 @@ export function ScanPage() {
   const [hasVideo, setHasVideo] = useState(false)
   const [sessionRuns, setSessionRuns] = useState<SessionRun[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  /** Clip id that should open the post dialog. Cleared when they dismiss it. */
+  const [sharePromptId, setSharePromptId] = useState<string | null>(null)
   const [queueLeft, setQueueLeft] = useState(0)
   const [demoLoading, setDemoLoading] = useState(false)
   /** True while upload analysis is still accumulating frames (live vitals). */
@@ -112,7 +119,9 @@ export function ScanPage() {
   const [anotherForId, setAnotherForId] = useState<string | null>(null)
   /** Shown only after the open camera sees a cap over the forehead. */
   const [hatPrompt, setHatPrompt] = useState(false)
+  const [hatReason, setHatReason] = useState<HatBlockReason | null>(null)
   const hatPromptRef = useRef(false)
+  const hatReasonRef = useRef<HatBlockReason | null>(null)
   const hatSkipRef = useRef(false)
   const hatStreakResetRef = useRef(false)
   const clockArmedRef = useRef(false)
@@ -193,7 +202,12 @@ export function ScanPage() {
       result.suppression.gated.length > 24
         ? result.suppression.gated
         : result.motion.global
-    return estimateShownBreath(series, source.sampleRateHz, result.motion.global)
+    return estimateShownBreath(
+      series,
+      source.sampleRateHz,
+      result.motion.global,
+      faceGreenSeries(source.roiRgb),
+    )
   }, [result, source])
 
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
@@ -305,7 +319,9 @@ export function ScanPage() {
     setCapturing(false)
     setCaptureLeft(null)
     hatPromptRef.current = false
+    hatReasonRef.current = null
     setHatPrompt(false)
+    setHatReason(null)
     hatSkipRef.current = false
     clockArmedRef.current = false
   }
@@ -512,6 +528,7 @@ export function ScanPage() {
             : pipeline.motion.global,
           buffer.sampleRateHz,
           pipeline.motion.global,
+          faceGreenSeries(buffer.roiRgb),
         )
       : null
     const risk = pipeline
@@ -555,9 +572,12 @@ export function ScanPage() {
     })
   }
 
-  function showHatPrompt(on: boolean) {
+  function showHatPrompt(on: boolean, reason: HatBlockReason | null = null) {
+    const nextReason = on ? reason : null
     hatPromptRef.current = on
+    hatReasonRef.current = nextReason
     setHatPrompt(on)
+    setHatReason(nextReason)
   }
 
   function requestWebcam() {
@@ -666,9 +686,9 @@ export function ScanPage() {
     if (thumbCapturedRef.current) return
     if (!canvas.width || !landmarks) return
     const data = captureFaceThumbnail(canvas, landmarks, {
-      blurPx: 0.9,
-      sizePx: 160,
-      quality: 0.7,
+      blurPx: 0,
+      sizePx: 320,
+      quality: 0.82,
     })
     if (data) {
       thumbCapturedRef.current = true
@@ -738,7 +758,12 @@ export function ScanPage() {
         : pipeline.motion.global
       : []
     const breath = pipeline
-      ? estimateShownBreath(series, buffer.sampleRateHz, pipeline.motion.global)
+      ? estimateShownBreath(
+          series,
+          buffer.sampleRateHz,
+          pipeline.motion.global,
+          faceGreenSeries(buffer.roiRgb),
+        )
       : null
     const durationSec = buffer.frames.length / buffer.sampleRateHz
     const take = webcamTakesRef.current + 1
@@ -795,6 +820,7 @@ export function ScanPage() {
     setSessionRuns((prev) => [...prev, entry].slice(-SESSION_MAX))
     setActiveSessionId(id)
     appliedSessionIdRef.current = id
+    if (bpm != null) setSharePromptId(id)
 
     saveSettledClip({
       source: 'webcam',
@@ -911,6 +937,7 @@ export function ScanPage() {
       let coveredStreak = 0
       let clearStreak = 0
       let noFaceFrames = 0
+      let hatWhileRecording = 0
 
       const tick = async (ts: number) => {
         if (gen !== captureGenRef.current || !webcamStreamRef.current) return
@@ -961,16 +988,24 @@ export function ScanPage() {
               clearStreak,
               noFaceFrames,
               prompt: hatPromptRef.current,
+              reason: hatReasonRef.current,
               skip: hatSkipRef.current,
             })
             coveredStreak = gate.coveredStreak
             clearStreak = gate.clearStreak
             noFaceFrames = gate.noFaceFrames
-            if (gate.prompt !== hatPromptRef.current) showHatPrompt(gate.prompt)
+            if (
+              gate.prompt !== hatPromptRef.current ||
+              gate.reason !== hatReasonRef.current
+            ) {
+              showHatPrompt(gate.prompt, gate.reason)
+            }
             if (gate.start) {
               armClock()
-            } else if (gate.prompt) {
-              setStatus('Take off the cap. The scan starts when the forehead is clear.')
+            } else if (gate.reason === 'hat') {
+              setStatus('Take off your hat and try again. The scan waits for a clear forehead.')
+            } else if (gate.reason === 'face') {
+              setStatus('The camera cannot see your face. Take off a hat and look straight ahead.')
             } else {
               setStatus('Camera is on. Hold still.')
             }
@@ -999,9 +1034,40 @@ export function ScanPage() {
           if (landmarks) {
             canvas.width = v.videoWidth
             canvas.height = v.videoHeight
-            const ctx = canvas.getContext('2d')
+            const ctx = canvas.getContext('2d', { willReadFrequently: true })
             if (ctx) {
               ctx.drawImage(v, 0, 0)
+              const coveredNow = foreheadCoveredInFrame(
+                ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+                canvas.width,
+                canvas.height,
+                landmarks,
+              )
+              hatWhileRecording = coveredNow ? hatWhileRecording + 1 : 0
+              if (hatWhileRecording >= HAT_COVERED_FRAMES) {
+                clockArmedRef.current = false
+                captureStartedAtRef.current = 0
+                setCaptureLeft(null)
+                const rec = recorderRef.current
+                recorderRef.current = null
+                if (rec && rec.state !== 'inactive') {
+                  try {
+                    rec.stop()
+                  } catch {
+                    /* already stopped */
+                  }
+                }
+                recordChunksRef.current = []
+                liveRef.current = empty
+                setLive(empty)
+                hatWhileRecording = 0
+                coveredStreak = HAT_COVERED_FRAMES
+                clearStreak = 0
+                showHatPrompt(true, 'hat')
+                setStatus('Take off your hat and try again. The scan waits for a clear forehead.')
+                rafRef.current = requestAnimationFrame(tick)
+                return
+              }
               const roiRgb = emptyRoiRgb()
               for (const id of ROI_IDS) {
                 const sample = sampleRoiRgbFromFrame(
@@ -1224,9 +1290,9 @@ export function ScanPage() {
       const thumb =
         canvas.width > 0
           ? captureFaceThumbnail(canvas, midLm, {
-              blurPx: 0.9,
-              sizePx: 160,
-              quality: 0.7,
+              blurPx: 0,
+              sizePx: 320,
+              quality: 0.82,
             })
           : null
 
@@ -1370,7 +1436,12 @@ export function ScanPage() {
             pipeline.suppression.gated.length > 24
               ? pipeline.suppression.gated
               : pipeline.motion.global
-          const breath = estimateShownBreath(series, fps, pipeline.motion.global)
+          const breath = estimateShownBreath(
+            series,
+            fps,
+            pipeline.motion.global,
+            faceGreenSeries(buffer.roiRgb),
+          )
           saveSettledClip({
             source: 'upload',
             pipeline,
@@ -1400,6 +1471,7 @@ export function ScanPage() {
             buffer,
           }
           patchSessionRun(clipId, done)
+          setSharePromptId(clipId)
           // Keep the stage on the clip that just finished if user hasn't jumped away.
           if (
             appliedSessionIdRef.current === clipId ||
@@ -1509,6 +1581,7 @@ export function ScanPage() {
                 showCtaBar
                 captureLeft={captureLeft}
                 hatPrompt={hatPrompt}
+                hatReason={hatReason}
                 onHatClear={recheckHat}
                 onHatSkip={skipHatCheck}
               />
@@ -1575,6 +1648,10 @@ export function ScanPage() {
 
           {hasResult && result && risk && showStory && !capturing && (
             <ShareToFeed
+              key={activeSessionId ?? 'current-scan'}
+              promptForId={sharePromptId}
+              scanId={activeSessionId}
+              onPromptDone={() => setSharePromptId(null)}
               bpm={result.gatedBpm}
               conflictScore={result.conflict.combined}
               riskLevel={risk.level}

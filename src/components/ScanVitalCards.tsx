@@ -1,6 +1,9 @@
 import { conflictRiskLabel } from '../lib/rppg/conflict'
 import type { PipelineResult } from '../lib/rppg/pipeline'
-import type { RespiratoryEstimate } from '../lib/rppg/respiratory'
+import {
+  breathScaleNote,
+  type RespiratoryEstimate,
+} from '../lib/rppg/respiratory'
 import { reliabilityFromConflict } from '../lib/feed/reliability'
 import { ReliabilityBadge } from './ReliabilityBadge'
 
@@ -54,10 +57,8 @@ export function ScanVitalCards({
         <span className="vitals-unit">breaths/min</span>
         <span className="vitals-note">
           {respiratory
-            ? respiratory.snr < 1.8
-              ? 'Rough estimate — not clinical'
-              : 'Experimental — not clinical'
-            : 'Not enough of a breath cycle in this clip'}
+            ? breathScaleNote(respiratory)
+            : 'Breath spacing not clear in this clip'}
         </span>
       </article>
 

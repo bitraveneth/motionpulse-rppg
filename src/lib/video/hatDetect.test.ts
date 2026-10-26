@@ -3,6 +3,7 @@ import {
   HAT_CLEAR_FRAMES,
   HAT_COVERED_FRAMES,
   HAT_NO_FACE_FRAMES,
+  capLineLooksCovered,
   foreheadLooksCovered,
   nextHatGate,
   type HatGateState,
@@ -19,6 +20,7 @@ const bare = {
   clearStreak: 0,
   noFaceFrames: 0,
   prompt: false,
+  reason: null,
   skip: false,
 } satisfies HatGateState
 
@@ -39,6 +41,13 @@ describe('forehead cap check', () => {
     expect(foreheadLooksCovered(fill({ r: 30, g: 70, b: 180 }, 8), fill(cheek, 8))).toBe(true)
     expect(foreheadLooksCovered(fill({ r: 12, g: 12, b: 14 }, 8), fill(cheek, 8))).toBe(true)
     expect(foreheadLooksCovered(fill({ r: 236, g: 236, b: 236 }, 8), fill(cheek, 8))).toBe(true)
+  })
+
+  it('flags a brim along the hairline and leaves a skin-colored hairline', () => {
+    const cheek = { r: 180, g: 130, b: 100 }
+    expect(capLineLooksCovered(fill({ r: 20, g: 20, b: 24 }, 6), fill(cheek, 8))).toBe(true)
+    expect(capLineLooksCovered(fill({ r: 24, g: 58, b: 150 }, 6), fill(cheek, 8))).toBe(true)
+    expect(capLineLooksCovered(fill(cheek, 6), fill(cheek, 8))).toBe(false)
   })
 
   it('does not guess when the cheeks are not visible', () => {
@@ -82,18 +91,18 @@ describe('hat gate', () => {
     expect(asked.start).toBe(true)
   })
 
-  it('starts without a face after a short wait, and stays put while asking', () => {
+  it('asks to try again when no face appears, and does not start the clock', () => {
     const waiting = nextHatGate({
       ...bare,
       covered: null,
       noFaceFrames: HAT_NO_FACE_FRAMES - 1,
     })
-    expect(waiting.start).toBe(true)
+    expect(waiting.start).toBe(false)
+    expect(waiting.prompt).toBe(true)
+    expect(waiting.reason).toBe('face')
     const asking = nextHatGate({
-      ...bare,
+      ...waiting,
       covered: null,
-      prompt: true,
-      noFaceFrames: HAT_NO_FACE_FRAMES,
     })
     expect(asking.start).toBe(false)
     expect(asking.prompt).toBe(true)

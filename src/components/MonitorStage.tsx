@@ -25,8 +25,9 @@ type Props = {
   showCtaBar?: boolean
   /** Seconds left in a 10 second webcam capture. Hidden when null. */
   captureLeft?: number | null
-  /** Camera is open and a cap is covering the forehead. */
+  /** Camera is open and a cap is covering the forehead, or no face is visible. */
   hatPrompt?: boolean
+  hatReason?: 'hat' | 'face' | null
   onHatClear?: () => void
   onHatSkip?: () => void
 }
@@ -51,6 +52,7 @@ export function MonitorStage({
   showCtaBar = true,
   captureLeft = null,
   hatPrompt = false,
+  hatReason = null,
   onHatClear,
   onHatSkip,
 }: Props) {
@@ -178,10 +180,13 @@ export function MonitorStage({
         <canvas ref={overlayRef} className="monitor-overlay" aria-hidden />
         {hatPrompt ? (
           <div className="hat-prompt hat-banner" role="status">
-            <h2 id="hat-prompt-title">Take off your cap</h2>
+            <h2 id="hat-prompt-title">
+              {hatReason === 'face' ? 'Look at the camera' : 'Take off your hat'}
+            </h2>
             <p>
-              The forehead is covered. Take the hat off and the 10 second scan
-              starts on its own. Glasses can stay on.
+              {hatReason === 'face'
+                ? 'Your face is not in view. Take off a hat, look straight ahead, and try again. Glasses can stay on.'
+                : 'The forehead is covered. Take off your hat and try again. The 10 second scan starts when the forehead is clear. Glasses can stay on.'}
             </p>
             <div className="hat-prompt-actions">
               <button type="button" className="cta cta-primary" onClick={onHatClear}>

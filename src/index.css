@@ -745,6 +745,7 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    object-position: center 28%;
   }
 
   .session-film.is-active {
@@ -871,6 +872,7 @@
     height: 3.25rem;
     border-radius: 0.45rem;
     object-fit: cover;
+    object-position: center 28%;
     background: linear-gradient(160deg, #d9e8f0, #eef4f7);
   }
 
@@ -1672,11 +1674,13 @@
 
   .result-thumb {
     display: block;
-    width: 5.5rem;
-    height: 5.5rem;
+    width: 5.4rem;
+    height: auto;
+    aspect-ratio: 3 / 4;
     border-radius: 0.75rem;
-    object-fit: cover;
-    background: linear-gradient(160deg, #d9e8f0, #eef4f7);
+    object-fit: contain;
+    object-position: center center;
+    background: #0c2233;
     border: 1px solid color-mix(in oklab, var(--color-sea) 22%, transparent);
   }
 
@@ -1688,6 +1692,7 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--color-sea);
+    background: linear-gradient(160deg, #d9e8f0, #eef4f7);
   }
 
   .result-story-hero-main {
@@ -1860,6 +1865,62 @@
     animation: rise 0.55s ease both;
   }
 
+  .share-reopen {
+    margin: 0 0 1.25rem;
+  }
+
+  .share-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgba(12, 34, 51, 0.55);
+  }
+
+  .share-modal-card {
+    width: min(22rem, 100%);
+    max-height: min(92vh, 40rem);
+    overflow: auto;
+    padding: 1rem 1rem 1.05rem;
+    border-radius: 1rem;
+    background: white;
+    box-shadow: 0 24px 60px -28px rgba(12, 34, 51, 0.7);
+  }
+
+  .share-modal-photo {
+    display: block;
+    width: 7.5rem;
+    height: 10rem;
+    margin: 0 auto 0.75rem;
+    object-fit: cover;
+    object-position: center 20%;
+    border-radius: 0.8rem;
+    background: #0c2233;
+  }
+
+  .share-modal-card h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.45rem;
+    letter-spacing: -0.02em;
+  }
+
+  .share-modal-lead {
+    margin: 0.4rem 0 0.85rem;
+    color: var(--color-ink-soft);
+    font-size: 0.92rem;
+    line-height: 1.4;
+  }
+
+  .share-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+  }
+
   .share-row {
     display: flex;
     flex-wrap: wrap;
@@ -1973,6 +2034,7 @@
     height: 3.5rem;
     border-radius: 0.55rem;
     object-fit: cover;
+    object-position: center 28%;
     background: linear-gradient(160deg, #d9e8f0, #eef4f7);
     border: 1px solid color-mix(in oklab, var(--color-ink) 8%, transparent);
   }
@@ -2098,6 +2160,7 @@
     height: 2.4rem;
     border-radius: 999px;
     object-fit: cover;
+    object-position: center center;
     background: #d9e8f0;
   }
 
@@ -2148,9 +2211,11 @@
   .post-card-media {
     display: block;
     width: calc(100% - 1.4rem);
-    height: 12.5rem;
+    height: auto;
+    aspect-ratio: 3 / 4;
     margin: 0 0.7rem;
-    object-fit: cover;
+    object-fit: contain;
+    object-position: center center;
     border-radius: 0.8rem;
     background: #0c2233;
   }
@@ -2206,6 +2271,17 @@
 
   .post-metric-breath {
     background: color-mix(in oklab, var(--color-sky) 70%, white);
+  }
+
+  .post-metric-breath dd .post-breath-count {
+    display: block;
+    margin-top: 0.2rem;
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: 0;
+    color: var(--color-ink-soft);
   }
 
   .post-detail {

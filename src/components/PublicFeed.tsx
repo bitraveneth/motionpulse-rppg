@@ -67,6 +67,13 @@ export function PublicFeed() {
   )
 }
 
+function breathCountNote(rate: number, durationSec: number): string {
+  const secs = Math.max(1, Math.round(durationSec))
+  const count = ((rate * durationSec) / 60).toFixed(1)
+  if (secs === 10) return `${count} breaths in 10s, × 6`
+  return `${count} breaths in ${secs}s`
+}
+
 function PostCard({ post }: { post: PublicFeedPost }) {
   const name = post.nickname?.trim() || 'Anonymous'
   const when = formatWhen(post.createdAt)
@@ -105,7 +112,7 @@ function PostCard({ post }: { post: PublicFeedPost }) {
           preload="metadata"
         >
           <source
-            src={feedVideoUrl(post.id)}
+            src={`${feedVideoUrl(post.id)}#t=0.1`}
             type={post.videoMime || 'video/mp4'}
           />
         </video>
@@ -126,10 +133,17 @@ function PostCard({ post }: { post: PublicFeedPost }) {
         <div className="post-metric post-metric-hero post-metric-breath">
           <dt>Respiratory rate</dt>
           <dd>
-            {post.respiratoryRate != null
-              ? post.respiratoryRate.toFixed(0)
-              : '—'}
-            {post.respiratoryRate != null ? <span> / min</span> : null}
+            {post.respiratoryRate != null ? (
+              <>
+                {post.respiratoryRate.toFixed(0)}
+                <span> / min</span>
+                <span className="post-breath-count">
+                  {breathCountNote(post.respiratoryRate, post.durationSec)}
+                </span>
+              </>
+            ) : (
+              '—'
+            )}
           </dd>
         </div>
         <div className={`post-metric post-metric-signal kind-${signal.kind}`}>

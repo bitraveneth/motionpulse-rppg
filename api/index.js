@@ -550,6 +550,8 @@ var feedListSelect = {
   thumb: true,
   hasVideo: true,
   videoMime: true,
+  hidden: true,
+  videoHidden: true,
   detail: true
 };
 function feedJson(post) {
@@ -561,18 +563,31 @@ function feedJson(post) {
 }
 app.get("/api/feed", async (c) => {
   const posts = await prisma.feedPost.findMany({
+    where: { hidden: false },
     orderBy: { createdAt: "desc" },
     take: 200,
     select: feedListSelect
   });
-  return c.json({ posts: posts.map(feedJson) });
+  return c.json({
+    posts: posts.map((post) => {
+      const json = feedJson(post);
+      if (post.videoHidden) return { ...json, hasVideo: false };
+      return json;
+    })
+  });
 });
 app.get("/api/feed/:id/video", async (c) => {
   const post = await prisma.feedPost.findUnique({
     where: { id: c.req.param("id") },
-    select: { videoMime: true, videoBytes: true, hasVideo: true }
+    select: {
+      videoMime: true,
+      videoBytes: true,
+      hasVideo: true,
+      hidden: true,
+      videoHidden: true
+    }
   });
-  if (!post?.hasVideo || !post.videoBytes) {
+  if (!post?.hasVideo || !post.videoBytes || post.hidden || post.videoHidden) {
     return c.json({ error: "No video on that post." }, 404);
   }
   const bytes = post.videoBytes instanceof Uint8Array ? post.videoBytes : new Uint8Array(post.videoBytes);
@@ -592,6 +607,20 @@ app.post("/api/feed", async (c) => {
     return c.json({ error: message }, 400);
   }
   const account = await currentAccount(c);
+  const duplicateSince = new Date(Date.now() - 45e3);
+  const duplicate = await prisma.feedPost.findFirst({
+    where: {
+      createdAt: { gte: duplicateSince },
+      nickname: parsed.nickname,
+      bpm: parsed.bpm,
+      durationSec: parsed.durationSec,
+      source: parsed.source,
+      conflictScore: parsed.conflictScore
+    },
+    orderBy: { createdAt: "desc" },
+    select: feedListSelect
+  });
+  if (duplicate) return c.json({ post: feedJson(duplicate) });
   let videoMime = parsed.video?.mime ?? null;
   let videoBytes = parsed.video ? Buffer.from(parsed.video.bytes) : null;
   if (parsed.video) {
@@ -668,10 +697,45 @@ app.use("/api/admin/*", async (c, next) => {
 app.get("/api/admin/feed", async (c) => {
   const posts = await prisma.feedPost.findMany({
     orderBy: { createdAt: "desc" },
-    take: 100,
+    take: 500,
     select: feedListSelect
   });
   return c.json({ posts: posts.map(feedJson) });
+});
+app.patch("/api/admin/feed/:id", async (c) => {
+  const body = await readJson(c);
+  const data = {};
+  if (typeof body?.hidden === "boolean") data.hidden = body.hidden;
+  if (typeof body?.videoHidden === "boolean") data.videoHidden = body.videoHidden;
+  if (Object.keys(data).length === 0) {
+    return c.json({ error: "Nothing to update." }, 400);
+  }
+  try {
+    const post = await prisma.feedPost.update({
+      where: { id: c.req.param("id") },
+      data,
+      select: feedListSelect
+    });
+    return c.json({ post: feedJson(post) });
+  } catch {
+    return c.json({ error: "Post not found." }, 404);
+  }
+});
+app.get("/api/admin/feed/:id/video", async (c) => {
+  const post = await prisma.feedPost.findUnique({
+    where: { id: c.req.param("id") },
+    select: { videoMime: true, videoBytes: true, hasVideo: true }
+  });
+  if (!post?.hasVideo || !post.videoBytes) {
+    return c.json({ error: "No video on that post." }, 404);
+  }
+  const bytes = post.videoBytes instanceof Uint8Array ? post.videoBytes : new Uint8Array(post.videoBytes);
+  const ranged = videoByteResponse(
+    bytes,
+    post.videoMime || "video/mp4",
+    c.req.header("range")
+  );
+  return c.body(Buffer.from(ranged.body), ranged.status, ranged.headers);
 });
 app.delete("/api/admin/feed/:id", async (c) => {
   await prisma.feedPost.deleteMany({ where: { id: c.req.param("id") } });

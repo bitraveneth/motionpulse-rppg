@@ -96,11 +96,11 @@ function AdminLogin({
 }
 
 const NAV = [
-  { to: 'sessions', label: 'Sessions' },
-  { to: 'feed', label: 'Feed' },
-  { to: 'content', label: 'Content' },
-  { to: 'users', label: 'Users' },
-  { to: 'export', label: 'Export' },
+  { to: '/admin/feed', label: 'Feed' },
+  { to: '/admin/sessions', label: 'Sessions' },
+  { to: '/admin/content', label: 'Content' },
+  { to: '/admin/users', label: 'Users' },
+  { to: '/admin/export', label: 'Export' },
 ]
 
 export function AdminApp() {
@@ -172,14 +172,14 @@ export function AdminApp() {
       </header>
       <main className="admin-main">
         <Routes>
-          <Route path="/" element={<Navigate to="sessions" replace />} />
+          <Route path="/" element={<Navigate to="/admin/feed" replace />} />
           <Route path="sessions" element={<AdminSessions />} />
           <Route path="feed" element={<AdminFeed />} />
           <Route path="sessions/:id" element={<AdminSessionDetail />} />
           <Route path="content" element={<AdminContent />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="export" element={<AdminExport />} />
-          <Route path="*" element={<Navigate to="sessions" replace />} />
+          <Route path="*" element={<Navigate to="/admin/feed" replace />} />
         </Routes>
       </main>
     </div>
