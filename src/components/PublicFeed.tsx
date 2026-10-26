@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { FeedDetail } from '../lib/feed/detail'
 import { reliabilityFromRisk } from '../lib/feed/reliability'
 import type { RiskLevel } from '../lib/feed/types'
 import {
@@ -98,12 +99,16 @@ function PostCard({ post }: { post: PublicFeedPost }) {
       {post.hasVideo ? (
         <video
           className="post-card-media"
-          src={feedVideoUrl(post.id)}
           poster={post.thumb ?? undefined}
           controls
           playsInline
           preload="metadata"
-        />
+        >
+          <source
+            src={feedVideoUrl(post.id)}
+            type={post.videoMime || 'video/mp4'}
+          />
+        </video>
       ) : post.thumb ? (
         <img className="post-card-media" src={post.thumb} alt="" />
       ) : (
@@ -118,8 +123,8 @@ function PostCard({ post }: { post: PublicFeedPost }) {
             <span> BPM</span>
           </dd>
         </div>
-        <div className="post-metric">
-          <dt>Breathing</dt>
+        <div className="post-metric post-metric-hero post-metric-breath">
+          <dt>Respiratory rate</dt>
           <dd>
             {post.respiratoryRate != null
               ? post.respiratoryRate.toFixed(0)
@@ -138,12 +143,79 @@ function PostCard({ post }: { post: PublicFeedPost }) {
             <span> sec</span>
           </dd>
         </div>
-        <div className="post-metric">
-          <dt>Motion overlap</dt>
-          <dd>{post.conflictScore.toFixed(2)}</dd>
-        </div>
       </dl>
+
+      {post.detail ? <PostDetail detail={post.detail} /> : null}
     </li>
+  )
+}
+
+function PostDetail({ detail }: { detail: FeedDetail }) {
+  const trust = [
+    ['Forehead', detail.trust.forehead],
+    ['Left cheek', detail.trust.leftCheek],
+    ['Right cheek', detail.trust.rightCheek],
+    ['Lower face', detail.trust.lowerFace],
+  ] as const
+
+  return (
+    <div className="post-detail">
+      <p className="post-detail-kicker">Motion, spectrum &amp; trust</p>
+      <section className="post-detail-block post-detail-motion">
+        <h2>Motion</h2>
+        <dl>
+          <div>
+            <dt>Overall</dt>
+            <dd>{detail.motion.overall.toFixed(3)}</dd>
+          </div>
+          <div>
+            <dt>Forehead</dt>
+            <dd>{detail.motion.forehead.toFixed(3)}</dd>
+          </div>
+          <div>
+            <dt>Cheeks</dt>
+            <dd>{detail.motion.cheeks.toFixed(3)}</dd>
+          </div>
+          <div>
+            <dt>Lower face</dt>
+            <dd>{detail.motion.lowerFace.toFixed(3)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="post-detail-block post-detail-spectrum">
+        <h2>Spectrum</h2>
+        <dl className="post-detail-three">
+          <div>
+            <dt>Time sync</dt>
+            <dd>{detail.spectrum.timeSync.toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt>Freq. overlap</dt>
+            <dd>{detail.spectrum.freqOverlap.toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt>Combined</dt>
+            <dd>{detail.spectrum.combined.toFixed(2)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="post-detail-block post-detail-trust">
+        <h2>Trust</h2>
+        <ul className="post-trust">
+          {trust.map(([label, value]) => (
+            <li key={label}>
+              <span>{label}</span>
+              <span className="post-trust-track" aria-hidden>
+                <span style={{ width: `${Math.round(value * 100)}%` }} />
+              </span>
+              <span className="post-trust-num">{Math.round(value * 100)}%</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
   )
 }
 

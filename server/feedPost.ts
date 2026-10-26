@@ -1,3 +1,4 @@
+import { parseFeedDetail, type FeedDetail } from '../src/lib/feed/detail'
 import { MAX_FEED_VIDEO_BYTES } from '../src/lib/feed/limits'
 
 /** How many public posts to keep. Older ones are dropped. */
@@ -22,6 +23,7 @@ export type FeedPostInput = {
   source: string
   thumb: string | null
   video: ParsedFeedVideo | null
+  detail: FeedDetail | null
 }
 
 export function parseFeedVideo(
@@ -84,5 +86,6 @@ export function parseFeedPost(
     source,
     thumb: thumb && thumb.startsWith('data:image') ? thumb : null,
     video,
+    detail: parseFeedDetail(body.detail),
   }
 }

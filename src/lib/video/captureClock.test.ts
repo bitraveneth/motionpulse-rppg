@@ -28,4 +28,13 @@ describe('webcam capture clock', () => {
     ).toBe('video/mp4')
     expect(preferredRecorderMime(() => false)).toBeNull()
   })
+
+  it('prefers mp4 when the browser can record both', () => {
+    expect(preferredRecorderMime(() => true)).toBe(
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    )
+    expect(preferredRecorderMime((mime) => mime.startsWith('video/webm'))).toBe(
+      'video/webm;codecs=vp8',
+    )
+  })
 })

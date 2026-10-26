@@ -113,6 +113,48 @@ async function currentAccount(c) {
   return { id, email, name, role };
 }
 
+// src/lib/feed/detail.ts
+function finite(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function readGroup(value, keys, clamp01) {
+  if (!value || typeof value !== "object") return null;
+  const source = value;
+  const out = {};
+  for (const key of keys) {
+    const n = finite(source[key]);
+    if (n == null) return null;
+    const rounded = Math.round(n * 1e4) / 1e4;
+    out[key] = clamp01 ? Math.min(1, Math.max(0, rounded)) : rounded;
+  }
+  return out;
+}
+function parseFeedDetail(value) {
+  if (!value || typeof value !== "object") return null;
+  const body = value;
+  const motion = readGroup(
+    body.motion,
+    ["overall", "forehead", "cheeks", "lowerFace"],
+    false
+  );
+  const spectrum = readGroup(
+    body.spectrum,
+    ["timeSync", "freqOverlap", "combined"],
+    true
+  );
+  const trust = readGroup(
+    body.trust,
+    ["forehead", "leftCheek", "rightCheek", "lowerFace"],
+    true
+  );
+  if (!motion || !spectrum || !trust) return null;
+  return {
+    motion,
+    spectrum,
+    trust
+  };
+}
+
 // src/lib/feed/limits.ts
 var MAX_FEED_VIDEO_BYTES = 2e6;
 
@@ -169,7 +211,116 @@ function parseFeedPost(body) {
     durationSec: Math.round(durationSec * 10) / 10,
     source,
     thumb: thumb && thumb.startsWith("data:image") ? thumb : null,
-    video
+    video,
+    detail: parseFeedDetail(body.detail)
+  };
+}
+
+// server/transcodeVideo.ts
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+function runFfmpeg(args) {
+  return new Promise((resolve) => {
+    const child = spawn("ffmpeg", args, { stdio: "ignore" });
+    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+async function toPhoneMp4(input) {
+  const dir = await mkdtemp(join(tmpdir(), "mp-vid-"));
+  const src = join(dir, "in.bin");
+  const out = join(dir, "out.mp4");
+  try {
+    await writeFile(src, input);
+    const ok = await runFfmpeg([
+      "-y",
+      "-i",
+      src,
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-profile:v",
+      "baseline",
+      "-level",
+      "3.1",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "28",
+      "-movflags",
+      "+faststart",
+      "-an",
+      out
+    ]);
+    if (!ok) return null;
+    const bytes = new Uint8Array(await readFile(out));
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_FEED_VIDEO_BYTES) return null;
+    return bytes;
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// server/videoRange.ts
+function unsatisfiable(total, common) {
+  return {
+    status: 416,
+    body: new Uint8Array(),
+    headers: {
+      ...common,
+      "Content-Range": `bytes */${total}`,
+      "Content-Length": "0"
+    }
+  };
+}
+function videoByteResponse(bytes, mime, rangeHeader) {
+  const total = bytes.byteLength;
+  const common = {
+    "Content-Type": mime || "video/mp4",
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=86400"
+  };
+  const header = rangeHeader?.split(",")[0]?.trim() ?? "";
+  if (!header) {
+    return {
+      status: 200,
+      body: bytes,
+      headers: { ...common, "Content-Length": String(total) }
+    };
+  }
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(header);
+  if (!match || match[1] === "" && match[2] === "") {
+    return unsatisfiable(total, common);
+  }
+  let start;
+  let end;
+  if (match[1] === "") {
+    const suffix = Number(match[2]);
+    if (!Number.isFinite(suffix) || suffix <= 0) return unsatisfiable(total, common);
+    start = Math.max(0, total - suffix);
+    end = total - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === "" ? total - 1 : Number(match[2]);
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= total || end < start) {
+    return unsatisfiable(total, common);
+  }
+  end = Math.min(end, total - 1);
+  const body = bytes.slice(start, end + 1);
+  return {
+    status: 206,
+    body,
+    headers: {
+      ...common,
+      "Content-Length": String(body.byteLength),
+      "Content-Range": `bytes ${start}-${end}/${total}`
+    }
   };
 }
 
@@ -397,10 +548,16 @@ var feedListSelect = {
   durationSec: true,
   source: true,
   thumb: true,
-  hasVideo: true
+  hasVideo: true,
+  videoMime: true,
+  detail: true
 };
 function feedJson(post) {
-  return { ...post, createdAt: post.createdAt.toISOString() };
+  return {
+    ...post,
+    createdAt: post.createdAt.toISOString(),
+    detail: parseFeedDetail(post.detail)
+  };
 }
 app.get("/api/feed", async (c) => {
   const posts = await prisma.feedPost.findMany({
@@ -419,10 +576,12 @@ app.get("/api/feed/:id/video", async (c) => {
     return c.json({ error: "No video on that post." }, 404);
   }
   const bytes = post.videoBytes instanceof Uint8Array ? post.videoBytes : new Uint8Array(post.videoBytes);
-  return c.body(bytes, 200, {
-    "Content-Type": post.videoMime || "video/webm",
-    "Cache-Control": "public, max-age=86400"
-  });
+  const ranged = videoByteResponse(
+    bytes,
+    post.videoMime || "video/mp4",
+    c.req.header("range")
+  );
+  return c.body(Buffer.from(ranged.body), ranged.status, ranged.headers);
 });
 app.post("/api/feed", async (c) => {
   const body = await readJson(c);
@@ -433,6 +592,15 @@ app.post("/api/feed", async (c) => {
     return c.json({ error: message }, 400);
   }
   const account = await currentAccount(c);
+  let videoMime = parsed.video?.mime ?? null;
+  let videoBytes = parsed.video ? Buffer.from(parsed.video.bytes) : null;
+  if (parsed.video) {
+    const mp4 = await toPhoneMp4(parsed.video.bytes);
+    if (mp4) {
+      videoMime = "video/mp4";
+      videoBytes = Buffer.from(mp4);
+    }
+  }
   const post = await prisma.feedPost.create({
     data: {
       nickname: parsed.nickname,
@@ -443,10 +611,11 @@ app.post("/api/feed", async (c) => {
       durationSec: parsed.durationSec,
       source: parsed.source,
       thumb: parsed.thumb,
-      videoMime: parsed.video?.mime ?? null,
-      videoBytes: parsed.video ? Buffer.from(parsed.video.bytes) : null,
+      videoMime,
+      videoBytes,
       hasVideo: Boolean(parsed.video),
-      userId: account?.id ?? null
+      userId: account?.id ?? null,
+      detail: parsed.detail ?? void 0
     },
     select: feedListSelect
   });

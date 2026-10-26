@@ -1,3 +1,4 @@
+import { parseFeedDetail, type FeedDetail } from './detail'
 import { MAX_FEED_VIDEO_BYTES } from './limits'
 
 export type PublicFeedPost = {
@@ -12,6 +13,8 @@ export type PublicFeedPost = {
   source: string
   thumb: string | null
   hasVideo: boolean
+  videoMime: string | null
+  detail: FeedDetail | null
 }
 
 export type PublishInput = {
@@ -24,6 +27,7 @@ export type PublishInput = {
   source: string
   thumb: string | null
   videoBlob: Blob | null
+  detail?: FeedDetail | null
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -53,6 +57,7 @@ async function postFeed(
       source: input.source,
       thumb: input.thumb,
       videoData,
+      detail: input.detail ?? null,
     }),
   })
   const json = (await res.json().catch(() => null)) as
@@ -87,7 +92,11 @@ export async function listPublicFeed(): Promise<PublicFeedPost[]> {
   const res = await fetch('/api/feed', { credentials: 'same-origin' })
   if (!res.ok) throw new Error(`Could not load the feed (${res.status})`)
   const json = (await res.json()) as { posts?: PublicFeedPost[] }
-  return json.posts ?? []
+  return (json.posts ?? []).map((post) => ({
+    ...post,
+    videoMime: post.videoMime ?? null,
+    detail: parseFeedDetail(post.detail),
+  }))
 }
 
 export function feedVideoUrl(id: string): string {

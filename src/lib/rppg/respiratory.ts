@@ -51,3 +51,24 @@ export function estimateRespiratoryRate(
     experimental: true,
   }
 }
+
+/**
+ * Number to show after a scan. A strict pulse-band estimate wins.
+ * A weaker pulse peak is labeled by its SNR at the call site.
+ * Face motion is only used when the pulse series has no breath peak.
+ */
+export function estimateShownBreath(
+  series: number[],
+  sampleRateHz: number,
+  motion?: number[] | null,
+): RespiratoryEstimate | null {
+  const fromPulse =
+    estimateRespiratoryRate(series, sampleRateHz) ??
+    estimateRespiratoryRate(series, sampleRateHz, { minSnr: 0.4 })
+  if (fromPulse) return fromPulse
+  if (!motion || motion === series) return null
+  return (
+    estimateRespiratoryRate(motion, sampleRateHz) ??
+    estimateRespiratoryRate(motion, sampleRateHz, { minSnr: 0.4 })
+  )
+}

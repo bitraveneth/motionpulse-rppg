@@ -32,7 +32,22 @@ describe('parseFeedVideo', () => {
 describe('parseFeedPost', () => {
   it('keeps a webcam share with no video', () => {
     const parsed = parseFeedPost(base)
-    expect(parsed).toMatchObject({ bpm: 72.4, source: 'webcam', video: null })
+    expect(parsed).toMatchObject({
+      bpm: 72.4,
+      source: 'webcam',
+      video: null,
+      detail: null,
+    })
+  })
+
+  it('keeps motion, spectrum, and trust on a share', () => {
+    const detail = {
+      motion: { overall: 0.01, forehead: 0.02, cheeks: 0.03, lowerFace: 0.04 },
+      spectrum: { timeSync: 0.2, freqOverlap: 0.4, combined: 0.3 },
+      trust: { forehead: 0.5, leftCheek: 0.2, rightCheek: 0.2, lowerFace: 0.1 },
+    }
+    const parsed = parseFeedPost({ ...base, respiratoryRate: 16, detail })
+    expect(parsed).toMatchObject({ respiratoryRate: 16, detail })
   })
 
   it('rejects a share with no heart rate', () => {

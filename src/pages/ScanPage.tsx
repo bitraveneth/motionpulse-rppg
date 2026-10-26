@@ -31,7 +31,7 @@ import {
 import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
 import { runPipeline, type PipelineResult } from '../lib/rppg/pipeline'
 import { conflictRiskLabel } from '../lib/rppg/conflict'
-import { estimateRespiratoryRate } from '../lib/rppg/respiratory'
+import { estimateShownBreath } from '../lib/rppg/respiratory'
 import { generateSyntheticSample } from '../lib/rppg/synthetic'
 import { paintSyntheticPreview } from '../lib/rppg/syntheticPreview'
 import {
@@ -193,7 +193,7 @@ export function ScanPage() {
       result.suppression.gated.length > 24
         ? result.suppression.gated
         : result.motion.global
-    return estimateRespiratoryRate(series, source.sampleRateHz)
+    return estimateShownBreath(series, source.sampleRateHz, result.motion.global)
   }, [result, source])
 
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
@@ -506,11 +506,12 @@ export function ScanPage() {
       console.error(e)
     }
     const breath = pipeline
-      ? estimateRespiratoryRate(
+      ? estimateShownBreath(
           pipeline.suppression.gated.length > 24
             ? pipeline.suppression.gated
             : pipeline.motion.global,
           buffer.sampleRateHz,
+          pipeline.motion.global,
         )
       : null
     const risk = pipeline
@@ -737,7 +738,7 @@ export function ScanPage() {
         : pipeline.motion.global
       : []
     const breath = pipeline
-      ? estimateRespiratoryRate(series, buffer.sampleRateHz)
+      ? estimateShownBreath(series, buffer.sampleRateHz, pipeline.motion.global)
       : null
     const durationSec = buffer.frames.length / buffer.sampleRateHz
     const take = webcamTakesRef.current + 1
@@ -770,7 +771,9 @@ export function ScanPage() {
     const bpm = pipeline?.gatedBpm
     setStatus(
       bpm != null
-        ? `10 second capture saved — ${bpm.toFixed(0)} BPM${take === 1 ? '. Try one more?' : '.'}`
+        ? `10 second capture saved — ${bpm.toFixed(0)} BPM${
+            breath ? `, ${breath.breathsPerMin.toFixed(0)} breaths/min` : ''
+          }${take === 1 ? '. Try one more?' : '.'}`
         : '10 second capture saved.',
     )
 
@@ -1367,7 +1370,7 @@ export function ScanPage() {
             pipeline.suppression.gated.length > 24
               ? pipeline.suppression.gated
               : pipeline.motion.global
-          const breath = estimateRespiratoryRate(series, fps)
+          const breath = estimateShownBreath(series, fps, pipeline.motion.global)
           saveSettledClip({
             source: 'upload',
             pipeline,
@@ -1579,6 +1582,28 @@ export function ScanPage() {
               thumbnailData={thumbnailData}
               durationSec={durationSec}
               respiratoryRate={respiratory ? respiratory.breathsPerMin : null}
+              detail={{
+                motion: {
+                  overall: result.motion.globalMean,
+                  forehead: result.motion.localMean.forehead,
+                  cheeks:
+                    (result.motion.localMean.leftCheek +
+                      result.motion.localMean.rightCheek) /
+                    2,
+                  lowerFace: result.motion.residualMean.lowerFace,
+                },
+                spectrum: {
+                  timeSync: result.conflict.cTemp,
+                  freqOverlap: result.conflict.cSpec,
+                  combined: result.conflict.combined,
+                },
+                trust: {
+                  forehead: result.reliability.weights.forehead ?? 0,
+                  leftCheek: result.reliability.weights.leftCheek ?? 0,
+                  rightCheek: result.reliability.weights.rightCheek ?? 0,
+                  lowerFace: result.reliability.weights.lowerFace ?? 0,
+                },
+              }}
               videoBlob={
                 activeSessionId
                   ? (webcamBlobsRef.current.get(activeSessionId) ?? null)

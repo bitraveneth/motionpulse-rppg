@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import type { FeedDetail } from '../lib/feed/detail'
 import { publishFeedPost } from '../lib/feed/publicFeed'
 import type { RiskLevel, RunSource } from '../lib/feed/types'
 
@@ -11,6 +12,8 @@ type Props = {
   thumbnailData?: string | null
   durationSec: number
   respiratoryRate?: number | null
+  /** Motion, spectrum, and trust numbers from the settled scan. */
+  detail?: FeedDetail | null
   /** 10 second webcam recording. Posted with the reading when it fits. */
   videoBlob?: Blob | null
   onShared?: (postId: string) => void
@@ -24,6 +27,7 @@ export function ShareToFeed({
   thumbnailData,
   durationSec,
   respiratoryRate,
+  detail,
   videoBlob,
   onShared,
 }: Props) {
@@ -47,6 +51,7 @@ export function ShareToFeed({
         source,
         thumb: thumbnailData ?? null,
         videoBlob: videoBlob ?? null,
+        detail: detail ?? null,
       })
       setMessage(
         droppedVideo

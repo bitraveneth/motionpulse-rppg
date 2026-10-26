@@ -2051,7 +2051,7 @@
   }
 
   .post-feed {
-    width: min(26rem, calc(100% - 1.5rem));
+    width: min(30rem, calc(100% - 1.5rem));
     margin: 0 auto 2.5rem;
   }
 
@@ -2167,7 +2167,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.4rem;
-    margin: 0.7rem 0.7rem 0.8rem;
+    margin: 0.7rem 0.7rem 0.35rem;
   }
 
   .post-metric {
@@ -2201,8 +2201,119 @@
   }
 
   .post-metric-hero {
-    grid-column: 1 / -1;
     background: color-mix(in oklab, var(--color-mint-soft) 55%, white);
+  }
+
+  .post-metric-breath {
+    background: color-mix(in oklab, var(--color-sky) 70%, white);
+  }
+
+  .post-detail {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0.15rem 0.7rem 0.85rem;
+    padding-top: 0.15rem;
+  }
+
+  .post-detail-kicker {
+    margin: 0.15rem 0.15rem 0.05rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .post-detail-block {
+    padding: 0.6rem 0.7rem 0.7rem;
+    border-radius: 0.8rem;
+    background: color-mix(in oklab, var(--color-fog) 80%, white);
+  }
+
+  .post-detail-motion {
+    background: color-mix(in oklab, #f4e4cf 72%, white);
+  }
+
+  .post-detail-spectrum {
+    background: color-mix(in oklab, var(--color-sky) 78%, white);
+  }
+
+  .post-detail-trust {
+    background: color-mix(in oklab, var(--color-mint-soft) 48%, white);
+  }
+
+  .post-detail-block h2 {
+    margin: 0 0 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .post-detail-block dl {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem 0.55rem;
+    margin: 0;
+  }
+
+  .post-detail-block dl.post-detail-three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .post-detail-block dl div {
+    margin: 0;
+  }
+
+  .post-detail-block dt {
+    margin: 0;
+    font-size: 0.68rem;
+    color: var(--color-ink-soft);
+  }
+
+  .post-detail-block dd {
+    margin: 0.05rem 0 0;
+    font-size: 0.95rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .post-trust {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .post-trust li {
+    display: grid;
+    grid-template-columns: 5.4rem minmax(0, 1fr) 2.2rem;
+    gap: 0.4rem;
+    align-items: center;
+    font-size: 0.78rem;
+  }
+
+  .post-trust-track {
+    display: block;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--color-ink) 8%, white);
+    overflow: hidden;
+  }
+
+  .post-trust-track span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-sea);
+  }
+
+  .post-trust-num {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    text-align: right;
   }
 
   .post-metric-hero dd {

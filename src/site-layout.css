@@ -710,7 +710,7 @@
   }
 
   .feed-page .post-feed {
-    width: min(26rem, calc(100% - 1.5rem));
+    width: min(30rem, calc(100% - 1.5rem));
     margin-inline: auto;
   }
 
@@ -1088,18 +1088,24 @@
   }
 
   .scan-vitals-strip {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
-    overflow-x: auto;
-    overflow-y: visible;
-    padding: 0 0 0.35rem;
-    margin: 0 -0.15rem;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
+    margin: 0;
+    padding: 0;
     min-width: 0;
-    align-items: flex-start;
+    align-items: stretch;
+  }
+
+  .scan-vitals-strip .vitals-scan-card {
+    width: auto;
+    min-width: 0;
+  }
+
+  .scan-vitals-strip .vitals-scan-card-signal {
+    grid-column: 1 / -1;
+    min-width: 0;
   }
 
   @media (max-width: 720px) {
@@ -1113,16 +1119,11 @@
     }
 
     .scan-vitals-strip {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      overflow: visible;
-      margin: 0;
-      padding: 0;
+      grid-template-columns: 1fr 1fr;
     }
 
-    .scan-vitals-strip .vitals-scan-card {
-      width: 100%;
-      min-width: 0;
+    .scan-vitals-strip .vitals-scan-value {
+      font-size: 1.85rem;
     }
 
     .hat-prompt-actions {
@@ -1137,16 +1138,11 @@
 
   @media (min-width: 900px) {
     .scan-vitals-strip {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      overflow-x: visible;
-      margin: 0;
-      padding: 0;
+      grid-template-columns: 1.15fr 1fr 1fr;
     }
 
-    .scan-vitals-strip .vitals-scan-card {
-      width: auto;
-      min-width: 0;
+    .scan-vitals-strip .vitals-scan-card-signal {
+      grid-column: auto;
     }
   }
 
@@ -1411,6 +1407,17 @@
   .vitals-scan-card-primary {
     background: var(--site-accent-soft);
     border-color: rgba(26, 127, 114, 0.22);
+  }
+
+  .vitals-scan-card-breath {
+    background: color-mix(in oklab, #d7e7f2 84%, white);
+    border-color: rgba(62, 112, 145, 0.28);
+  }
+
+  .scan-vitals-strip .vitals-scan-card {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 0;
   }
 
   .vitals-scan-value {

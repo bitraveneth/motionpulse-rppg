@@ -107,6 +107,8 @@ model FeedPost {
   videoBytes      Bytes?
   hasVideo        Boolean  @default(false)
   userId          String?
+  /// Motion, spectrum, and trust summaries. Null on older posts.
+  detail          Json?
 
   @@index([createdAt])
 }

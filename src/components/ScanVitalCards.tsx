@@ -43,13 +43,22 @@ export function ScanVitalCards({
         ) : null}
       </article>
 
-      <article className="vitals-scan-card" role="listitem">
+      <article
+        className="vitals-scan-card vitals-scan-card-breath"
+        role="listitem"
+      >
         <span className="vitals-label">Respiratory rate</span>
         <span className="vitals-scan-value">
           {respiratory ? respiratory.breathsPerMin.toFixed(0) : '—'}
         </span>
-        <span className="vitals-unit">/min</span>
-        <span className="vitals-note">Experimental — not clinical</span>
+        <span className="vitals-unit">breaths/min</span>
+        <span className="vitals-note">
+          {respiratory
+            ? respiratory.snr < 1.8
+              ? 'Rough estimate — not clinical'
+              : 'Experimental — not clinical'
+            : 'Not enough of a breath cycle in this clip'}
+        </span>
       </article>
 
       <article className="vitals-scan-card vitals-scan-card-signal" role="listitem">

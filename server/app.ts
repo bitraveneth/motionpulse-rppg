@@ -7,7 +7,10 @@ import {
   type SessionAccount,
 } from './auth'
 import { prisma } from './db'
+import { parseFeedDetail } from '../src/lib/feed/detail'
 import { MAX_FEED_POSTS, parseFeedPost } from './feedPost'
+import { toPhoneMp4 } from './transcodeVideo'
+import { videoByteResponse } from './videoRange'
 import { hashPassword, randomPassword, verifyPassword } from './password'
 
 export const app = new Hono<{ Variables: { account: SessionAccount } }>()
@@ -210,6 +213,8 @@ const feedListSelect = {
   source: true,
   thumb: true,
   hasVideo: true,
+  videoMime: true,
+  detail: true,
 } as const
 
 function feedJson(post: {
@@ -224,8 +229,14 @@ function feedJson(post: {
   source: string
   thumb: string | null
   hasVideo: boolean
+  videoMime: string | null
+  detail: unknown
 }) {
-  return { ...post, createdAt: post.createdAt.toISOString() }
+  return {
+    ...post,
+    createdAt: post.createdAt.toISOString(),
+    detail: parseFeedDetail(post.detail),
+  }
 }
 
 app.get('/api/feed', async (c) => {
@@ -249,10 +260,12 @@ app.get('/api/feed/:id/video', async (c) => {
     post.videoBytes instanceof Uint8Array
       ? post.videoBytes
       : new Uint8Array(post.videoBytes)
-  return c.body(bytes, 200, {
-    'Content-Type': post.videoMime || 'video/webm',
-    'Cache-Control': 'public, max-age=86400',
-  })
+  const ranged = videoByteResponse(
+    bytes,
+    post.videoMime || 'video/mp4',
+    c.req.header('range'),
+  )
+  return c.body(Buffer.from(ranged.body), ranged.status, ranged.headers)
 })
 
 app.post('/api/feed', async (c) => {
@@ -267,6 +280,15 @@ app.post('/api/feed', async (c) => {
     return c.json({ error: message }, 400)
   }
   const account = await currentAccount(c)
+  let videoMime = parsed.video?.mime ?? null
+  let videoBytes = parsed.video ? Buffer.from(parsed.video.bytes) : null
+  if (parsed.video) {
+    const mp4 = await toPhoneMp4(parsed.video.bytes)
+    if (mp4) {
+      videoMime = 'video/mp4'
+      videoBytes = Buffer.from(mp4)
+    }
+  }
   const post = await prisma.feedPost.create({
     data: {
       nickname: parsed.nickname,
@@ -277,10 +299,11 @@ app.post('/api/feed', async (c) => {
       durationSec: parsed.durationSec,
       source: parsed.source,
       thumb: parsed.thumb,
-      videoMime: parsed.video?.mime ?? null,
-      videoBytes: parsed.video ? Buffer.from(parsed.video.bytes) : null,
+      videoMime,
+      videoBytes,
       hasVideo: Boolean(parsed.video),
       userId: account?.id ?? null,
+      detail: parsed.detail ?? undefined,
     },
     select: feedListSelect,
   })
