@@ -48,6 +48,7 @@ import {
   preferredRecorderMime,
   secondsLeft,
 } from '../lib/video/captureClock'
+import { foreheadCoveredInFrame, nextHatGate } from '../lib/video/hatDetect'
 import { optimizeVideoFile } from '../lib/video/optimize'
 import { streamAnalyzeVideo } from '../lib/video/streamAnalyze'
 import type { RunSource } from '../lib/feed/types'
@@ -109,8 +110,12 @@ export function ScanPage() {
   const [capturing, setCapturing] = useState(false)
   /** Session clip id that should offer a second 10 second take. */
   const [anotherForId, setAnotherForId] = useState<string | null>(null)
-  /** Shown before the camera starts so a hat is not covering the forehead. */
+  /** Shown only after the open camera sees a cap over the forehead. */
   const [hatPrompt, setHatPrompt] = useState(false)
+  const hatPromptRef = useRef(false)
+  const hatSkipRef = useRef(false)
+  const hatStreakResetRef = useRef(false)
+  const clockArmedRef = useRef(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   /** Hidden element used only while decoding/analyzing uploads (keeps preview free to browse). */
   const analysisVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -299,6 +304,10 @@ export function ScanPage() {
     }
     setCapturing(false)
     setCaptureLeft(null)
+    hatPromptRef.current = false
+    setHatPrompt(false)
+    hatSkipRef.current = false
+    clockArmedRef.current = false
   }
 
   function stopRecorder(rec: MediaRecorder | null, chunks: Blob[]): Promise<Blob | null> {
@@ -545,19 +554,32 @@ export function ScanPage() {
     })
   }
 
+  function showHatPrompt(on: boolean) {
+    hatPromptRef.current = on
+    setHatPrompt(on)
+  }
+
   function requestWebcam() {
     if (capturing || busy) return
     setError(null)
-    setHatPrompt(true)
+    showHatPrompt(false)
+    hatSkipRef.current = false
+    void handleInputMode('webcam')
   }
 
-  async function startAfterHat() {
-    setHatPrompt(false)
-    await handleInputMode('webcam')
+  function recheckHat() {
+    hatStreakResetRef.current = true
+    showHatPrompt(false)
+    setStatus('Checking the forehead again…')
+  }
+
+  function skipHatCheck() {
+    hatSkipRef.current = true
+    showHatPrompt(false)
   }
 
   async function handleInputMode(mode: InputMode) {
-    setHatPrompt(false)
+    showHatPrompt(false)
     setError(null)
     setInputMode(mode)
     setStage('idle')
@@ -845,41 +867,50 @@ export function ScanPage() {
       setStageDetail('Keep your face centered for 10 seconds')
       setLiveEstimating(true)
       setBusy(false)
-      captureStartedAtRef.current = performance.now()
-      setCaptureLeft(10)
+      captureStartedAtRef.current = 0
+      clockArmedRef.current = false
+      hatSkipRef.current = false
+      setCaptureLeft(null)
+      showHatPrompt(false)
       recordChunksRef.current = []
+      setStatus('Camera is on. Hold still.')
 
-      const mime =
-        typeof MediaRecorder !== 'undefined'
-          ? preferredRecorderMime((type) => MediaRecorder.isTypeSupported(type))
-          : null
-      if (mime) {
-        try {
-          const rec = new MediaRecorder(stream, {
-            mimeType: mime,
-            videoBitsPerSecond: 450_000,
-          })
-          rec.ondataavailable = (event) => {
-            if (event.data.size > 0) recordChunksRef.current.push(event.data)
+      const armClock = () => {
+        if (clockArmedRef.current || gen !== captureGenRef.current) return
+        clockArmedRef.current = true
+        showHatPrompt(false)
+        captureStartedAtRef.current = performance.now()
+        setCaptureLeft(10)
+        liveRef.current = empty
+        setLive(empty)
+        setDurationSec(0)
+        const mime =
+          typeof MediaRecorder !== 'undefined'
+            ? preferredRecorderMime((type) => MediaRecorder.isTypeSupported(type))
+            : null
+        if (mime) {
+          try {
+            const rec = new MediaRecorder(stream, {
+              mimeType: mime,
+              videoBitsPerSecond: 450_000,
+            })
+            rec.ondataavailable = (event) => {
+              if (event.data.size > 0) recordChunksRef.current.push(event.data)
+            }
+            rec.start(200)
+            recorderRef.current = rec
+          } catch (e) {
+            console.error(e)
           }
-          rec.start(200)
-          recorderRef.current = rec
-        } catch (e) {
-          console.error(e)
         }
       }
 
+      let coveredStreak = 0
+      let clearStreak = 0
+      let noFaceFrames = 0
+
       const tick = async (ts: number) => {
         if (gen !== captureGenRef.current || !webcamStreamRef.current) return
-        const now = performance.now()
-        const left = secondsLeft(
-          captureRemainingMs(captureStartedAtRef.current, now),
-        )
-        setCaptureLeft((prev) => (prev === left ? prev : left))
-        if (captureShouldStop(captureStartedAtRef.current, now)) {
-          void finishWebcamCapture(gen)
-          return
-        }
         if (ts - lastTsRef.current < 66) {
           rafRef.current = requestAnimationFrame(tick)
           return
@@ -889,6 +920,74 @@ export function ScanPage() {
         const canvas = canvasRef.current
         if (!v || !canvas || v.readyState < 2) {
           rafRef.current = requestAnimationFrame(tick)
+          return
+        }
+        if (!clockArmedRef.current) {
+          if (hatStreakResetRef.current) {
+            coveredStreak = 0
+            clearStreak = 0
+            noFaceFrames = 0
+            hatStreakResetRef.current = false
+          }
+          try {
+            const landmarks = await detectVideoFrame(v, ts)
+            if (gen !== captureGenRef.current) return
+            let covered: boolean | null = null
+            if (landmarks) {
+              canvas.width = v.videoWidth
+              canvas.height = v.videoHeight
+              const ctx = canvas.getContext('2d', { willReadFrequently: true })
+              if (ctx) {
+                ctx.drawImage(v, 0, 0)
+                covered = foreheadCoveredInFrame(
+                  ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+                  canvas.width,
+                  canvas.height,
+                  landmarks,
+                )
+              }
+              setLive({
+                frames: [landmarks],
+                roiRgb: emptyRoiRgb(),
+                sampleRateHz: 15,
+              })
+            }
+            const gate = nextHatGate({
+              covered,
+              coveredStreak,
+              clearStreak,
+              noFaceFrames,
+              prompt: hatPromptRef.current,
+              skip: hatSkipRef.current,
+            })
+            coveredStreak = gate.coveredStreak
+            clearStreak = gate.clearStreak
+            noFaceFrames = gate.noFaceFrames
+            if (gate.prompt !== hatPromptRef.current) showHatPrompt(gate.prompt)
+            if (gate.start) {
+              armClock()
+            } else if (gate.prompt) {
+              setStatus('Take off the cap. The scan starts when the forehead is clear.')
+            } else {
+              setStatus('Camera is on. Hold still.')
+            }
+          } catch (e) {
+            setError(e instanceof Error ? e.message : 'Camera analysis failed')
+          }
+          if (!clockArmedRef.current && gen === captureGenRef.current) {
+            rafRef.current = requestAnimationFrame(tick)
+          } else if (clockArmedRef.current && gen === captureGenRef.current) {
+            rafRef.current = requestAnimationFrame(tick)
+          }
+          return
+        }
+        const now = performance.now()
+        const left = secondsLeft(
+          captureRemainingMs(captureStartedAtRef.current, now),
+        )
+        setCaptureLeft((prev) => (prev === left ? prev : left))
+        if (captureShouldStop(captureStartedAtRef.current, now)) {
+          void finishWebcamCapture(gen)
           return
         }
         try {
@@ -1387,33 +1486,6 @@ export function ScanPage() {
           ) : null}
 
           <div className="scan-session-frame product-frame">
-            {hatPrompt ? (
-              <section className="hat-prompt" aria-labelledby="hat-prompt-title">
-                <h2 id="hat-prompt-title">Take off your hat</h2>
-                <p>
-                  The scan reads color from your forehead. A hat, cap, or hood
-                  covers that area, so the number will be wrong. Glasses can
-                  stay on. Then hold still for 10 seconds.
-                </p>
-                <div className="hat-prompt-actions">
-                  <button
-                    type="button"
-                    className="cta cta-primary"
-                    onClick={() => void startAfterHat()}
-                  >
-                    Hat is off — start
-                  </button>
-                  <button
-                    type="button"
-                    className="cta cta-secondary"
-                    onClick={() => setHatPrompt(false)}
-                  >
-                    Not now
-                  </button>
-                </div>
-              </section>
-            ) : null}
-
             <div className="scan-session-monitor-wrap">
               <MonitorStage
                 videoRef={videoRef}
@@ -1433,6 +1505,9 @@ export function ScanPage() {
                 status={status}
                 showCtaBar
                 captureLeft={captureLeft}
+                hatPrompt={hatPrompt}
+                onHatClear={recheckHat}
+                onHatSkip={skipHatCheck}
               />
             </div>
 

@@ -25,6 +25,10 @@ type Props = {
   showCtaBar?: boolean
   /** Seconds left in a 10 second webcam capture. Hidden when null. */
   captureLeft?: number | null
+  /** Camera is open and a cap is covering the forehead. */
+  hatPrompt?: boolean
+  onHatClear?: () => void
+  onHatSkip?: () => void
 }
 
 /** Large monitoring surface: face video + detection box + timeline slider. */
@@ -46,6 +50,9 @@ export function MonitorStage({
   status,
   showCtaBar = true,
   captureLeft = null,
+  hatPrompt = false,
+  onHatClear,
+  onHatSkip,
 }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const box = faceBoxFromLandmarks(landmarks)
@@ -160,12 +167,32 @@ export function MonitorStage({
           </div>
         )}
         {captureLeft != null ? (
-          <div className="monitor-countdown" aria-live="polite">
+          <div
+            className="monitor-countdown"
+            aria-live="polite"
+            aria-label={`${captureLeft} seconds left`}
+          >
             <span className="monitor-countdown-num">{captureLeft}</span>
-            <p className="monitor-countdown-note">Hat off · hold still</p>
           </div>
         ) : null}
         <canvas ref={overlayRef} className="monitor-overlay" aria-hidden />
+        {hatPrompt ? (
+          <div className="hat-prompt hat-banner" role="status">
+            <h2 id="hat-prompt-title">Take off your cap</h2>
+            <p>
+              The forehead is covered. Take the hat off and the 10 second scan
+              starts on its own. Glasses can stay on.
+            </p>
+            <div className="hat-prompt-actions">
+              <button type="button" className="cta cta-primary" onClick={onHatClear}>
+                Hat is off
+              </button>
+              <button type="button" className="cta cta-secondary" onClick={onHatSkip}>
+                No hat — start
+              </button>
+            </div>
+          </div>
+        ) : null}
         <canvas ref={canvasRef} className="sr-only" aria-hidden />
       </div>
 
