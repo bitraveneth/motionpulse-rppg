@@ -1,119 +1,185 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { api } from '../lib/api'
-import { useContent } from '../lib/content'
-import { displayNickname } from '../lib/feed/types'
-import type { PublicFeedPost } from '../lib/feed/post'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { reliabilityFromRisk } from '../lib/feed/reliability'
+import type { RiskLevel } from '../lib/feed/types'
+import {
+  feedVideoUrl,
+  listPublicFeed,
+  type PublicFeedPost,
+} from '../lib/feed/publicFeed'
 
 export function PublicFeed() {
-  const c = useContent()
-  const [posts, setPosts] = useState<PublicFeedPost[]>([])
+  const [posts, setPosts] = useState<PublicFeedPost[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const requestId = useRef(0)
 
-  const load = useCallback(async () => {
-    try {
-      const res = await api<{ posts: PublicFeedPost[] }>('/api/feed')
-      setPosts(res.posts)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load the feed')
-    } finally {
-      setLoading(false)
-    }
+  const load = useCallback(() => {
+    const id = ++requestId.current
+    setError(null)
+    listPublicFeed()
+      .then((rows) => {
+        if (id !== requestId.current) return
+        setPosts(rows)
+        setError(null)
+      })
+      .catch((e) => {
+        if (id !== requestId.current) return
+        setPosts((current) => current ?? [])
+        setError(e instanceof Error ? e.message : 'Could not load the feed')
+      })
   }, [])
 
   useEffect(() => {
-    void load()
+    load()
   }, [load])
 
-  return (
-    <div>
-      <h2 id="feed-title">{c('home.feed.title')}</h2>
-      <p className="home-feed-lead">{c('home.feed.lead')}</p>
+  const count = posts?.length ?? 0
 
-      {loading ? <p className="home-card-muted">Loading results…</p> : null}
+  return (
+    <section className="post-feed" aria-labelledby="feed-title">
+      <header className="post-feed-head">
+        <h1 id="feed-title">Feed</h1>
+        <p>
+          {posts === null
+            ? 'Loading posts…'
+            : count === 0
+              ? 'No one has posted a reading yet.'
+              : `${count} ${count === 1 ? 'post' : 'posts'}`}
+        </p>
+      </header>
+
       {error ? (
         <p className="share-err" role="alert">
           {error}
         </p>
       ) : null}
 
-      {!loading && !error && posts.length === 0 ? (
-        <div className="empty-state">
-          <p>No shared results yet</p>
-          <p>
-            <Link to="/scan?action=webcam">Start a 10-second scan</Link>
-            {' '}
-            and tap Share if you want it listed here.
-          </p>
-        </div>
+      {posts && posts.length === 0 && !error ? (
+        <p className="post-feed-empty">Posts show up here after someone shares a scan.</p>
       ) : null}
 
-      {posts.length > 0 ? (
-        <ul className="feed-cards home-feed-cards">
-          {posts.map((post) => (
-            <li key={post.id} className={`feed-card risk-${post.risk ?? 'low'}`}>
-              <div className="feed-card-body">
-                {post.thumb ? (
-                  <img
-                    className="feed-thumb"
-                    src={post.thumb}
-                    alt=""
-                    width={56}
-                    height={56}
-                  />
-                ) : (
-                  <div className="feed-thumb feed-thumb-placeholder" aria-hidden />
-                )}
-                <div className="feed-card-main">
-                  <div className="feed-card-top">
-                    <span className="feed-nick">{displayNickname(post.nickname)}</span>
-                  </div>
-                  <dl className="home-feed-stats">
-                    <div>
-                      <dt>Heart rate</dt>
-                      <dd>{post.settledHeartRate.toFixed(0)} BPM</dd>
-                    </div>
-                    <div>
-                      <dt>Respiratory</dt>
-                      <dd>
-                        {post.respiratoryRate != null
-                          ? `${post.respiratoryRate.toFixed(0)} /min`
-                          : '—'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Signal</dt>
-                      <dd>{post.signalLabel ?? '—'}</dd>
-                    </div>
-                    <div>
-                      <dt>Risk</dt>
-                      <dd>{post.risk ?? '—'}</dd>
-                    </div>
-                  </dl>
-                  <time dateTime={post.createdAt} className="feed-card-time">
-                    {formatWhen(post.createdAt)}
-                  </time>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+      <ol className="post-list">
+        {(posts ?? []).map((post) => (
+          <PostCard key={post.id} post={post} />
+        ))}
+      </ol>
+    </section>
   )
 }
 
-function formatWhen(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      month: 'short',
+function PostCard({ post }: { post: PublicFeedPost }) {
+  const name = post.nickname?.trim() || 'Anonymous'
+  const when = formatWhen(post.createdAt)
+  const signal = signalCopy(post.riskLevel)
+
+  return (
+    <li className="post-card">
+      <header className="post-card-head">
+        {post.thumb ? (
+          <img className="post-card-avatar" src={post.thumb} alt="" />
+        ) : (
+          <span className="post-card-avatar post-card-avatar-fallback" aria-hidden>
+            {name.slice(0, 1).toUpperCase()}
+          </span>
+        )}
+        <div className="post-card-who">
+          <strong className="post-card-name">{name}</strong>
+          <time className="post-card-time" dateTime={post.createdAt}>
+            {when.date}
+            <span>{when.time}</span>
+          </time>
+        </div>
+        <span className="post-card-source">{sourceLabel(post.source)}</span>
+      </header>
+
+      <p className="post-card-caption">
+        Shared a {post.durationSec.toFixed(0)} second face scan.
+      </p>
+
+      {post.hasVideo ? (
+        <video
+          className="post-card-media"
+          src={feedVideoUrl(post.id)}
+          poster={post.thumb ?? undefined}
+          controls
+          playsInline
+          preload="metadata"
+        />
+      ) : post.thumb ? (
+        <img className="post-card-media" src={post.thumb} alt="" />
+      ) : (
+        <div className="post-card-media post-card-media-empty">No photo</div>
+      )}
+
+      <dl className="post-card-metrics">
+        <div className="post-metric post-metric-hero">
+          <dt>Heart rate</dt>
+          <dd>
+            {post.bpm.toFixed(0)}
+            <span> BPM</span>
+          </dd>
+        </div>
+        <div className="post-metric">
+          <dt>Breathing</dt>
+          <dd>
+            {post.respiratoryRate != null
+              ? post.respiratoryRate.toFixed(0)
+              : '—'}
+            {post.respiratoryRate != null ? <span> / min</span> : null}
+          </dd>
+        </div>
+        <div className={`post-metric post-metric-signal kind-${signal.kind}`}>
+          <dt>Signal</dt>
+          <dd>{signal.badge}</dd>
+        </div>
+        <div className="post-metric">
+          <dt>Length</dt>
+          <dd>
+            {post.durationSec.toFixed(0)}
+            <span> sec</span>
+          </dd>
+        </div>
+        <div className="post-metric">
+          <dt>Motion overlap</dt>
+          <dd>{post.conflictScore.toFixed(2)}</dd>
+        </div>
+      </dl>
+    </li>
+  )
+}
+
+function sourceLabel(source: string): string {
+  if (source === 'webcam') return 'Webcam'
+  if (source === 'upload') return 'Upload'
+  if (source === 'sample') return 'Sample'
+  if (source === 'batch') return 'Demo set'
+  return source
+}
+
+function signalCopy(level: string): { badge: string; kind: string } {
+  if (
+    level === 'low' ||
+    level === 'moderate' ||
+    level === 'elevated' ||
+    level === 'high'
+  ) {
+    const remark = reliabilityFromRisk(level as RiskLevel)
+    return { badge: remark.badge, kind: remark.kind }
+  }
+  return { badge: level || 'Unknown', kind: 'mixed' }
+}
+
+function formatWhen(iso: string): { date: string; time: string } {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return { date: iso, time: '' }
+  return {
+    date: new Intl.DateTimeFormat(undefined, {
       day: 'numeric',
-      hour: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }).format(d),
+    time: new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
       minute: '2-digit',
-    })
-  } catch {
-    return iso
+    }).format(d),
   }
 }

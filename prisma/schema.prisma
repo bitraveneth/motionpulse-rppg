@@ -1,5 +1,6 @@
 // MotionPulse admin backend — one database (Prisma Postgres).
-// Numbers, short traces, consent, optional tiny thumbs. Never raw video.
+// Scan rows store numbers, short traces, and an optional tiny thumb.
+// FeedPost may store a short face clip when someone posts it to the public feed.
 
 generator client {
   provider = "prisma-client-js"
@@ -71,6 +72,7 @@ model Clip {
   id               String        @id @default(cuid())
   sessionId        String
   session          ScanSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt        DateTime      @default(now())
   index            Int           @default(0)
   durationSec      Float?
   fps              Float?
@@ -89,6 +91,26 @@ model Clip {
   @@index([sessionId])
 }
 
+// Public feed posts. A short face clip is stored only when someone shares it.
+model FeedPost {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  nickname        String?
+  bpm             Float
+  conflictScore   Float
+  riskLevel       String
+  respiratoryRate Float?
+  durationSec     Float
+  source          String
+  thumb           String?
+  videoMime       String?
+  videoBytes      Bytes?
+  hasVideo        Boolean  @default(false)
+  userId          String?
+
+  @@index([createdAt])
+}
+
 model GroundTruth {
   id               String  @id @default(cuid())
   clipId           String  @unique
@@ -97,19 +119,4 @@ model GroundTruth {
   source           String // self-count | dataset | device
   datasetName      String?
   datasetSubjectId String?
-}
-
-// One public share. Metrics, time, optional nickname, optional tiny thumb.
-// Never a video file and never video bytes.
-model FeedPost {
-  id               String   @id @default(cuid())
-  createdAt        DateTime @default(now())
-  nickname         String?
-  settledHeartRate Float
-  respiratoryRate  Float? // experimental
-  signalLabel      String?
-  risk             String?
-  thumb            String? // optional tiny data-url crop, never raw video
-
-  @@index([createdAt])
 }

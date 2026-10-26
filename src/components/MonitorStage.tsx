@@ -23,8 +23,8 @@ type Props = {
   status: string
   /** Hide overlay source buttons when hero / nav already provides CTAs */
   showCtaBar?: boolean
-  /** Shown after a finished webcam capture so the camera can run again. */
-  onTryAgain?: () => void
+  /** Seconds left in a 10 second webcam capture. Hidden when null. */
+  captureLeft?: number | null
 }
 
 /** Large monitoring surface: face video + detection box + timeline slider. */
@@ -45,7 +45,7 @@ export function MonitorStage({
   demoLoading = false,
   status,
   showCtaBar = true,
-  onTryAgain,
+  captureLeft = null,
 }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const box = faceBoxFromLandmarks(landmarks)
@@ -159,52 +159,14 @@ export function MonitorStage({
             )}
           </div>
         )}
-        <canvas ref={overlayRef} className="monitor-overlay" aria-hidden />
-        <canvas ref={canvasRef} className="sr-only" aria-hidden />
-
-        {showCtaBar ? (
-          <div
-            className="monitor-cta-bar"
-            role="group"
-            aria-label="Choose a video source"
-          >
-            <button
-              type="button"
-              className={`cta cta-primary ${inputMode === 'upload' ? 'is-active' : ''}`}
-              onClick={onUploadClick}
-              disabled={busy}
-            >
-              Upload face video
-            </button>
-            <button
-              type="button"
-              className={`cta cta-secondary ${inputMode === 'webcam' ? 'is-active' : ''}`}
-              onClick={onWebcam}
-              disabled={busy}
-            >
-              Webcam
-            </button>
-            <button
-              type="button"
-              className={`cta cta-secondary ${inputMode === 'synthetic' ? 'is-active' : ''}`}
-              onClick={onSample}
-              disabled={busy || demoLoading}
-            >
-              Try sample
-            </button>
-            {onLoadDemoSet && (
-              <button
-                type="button"
-                className="cta cta-secondary"
-                onClick={onLoadDemoSet}
-                disabled={busy || demoLoading}
-                title="Load all mp4/webm/mov from public/demo-clips (up to 10)"
-              >
-                {demoLoading ? 'Loading demos…' : 'Load demo set'}
-              </button>
-            )}
+        {captureLeft != null ? (
+          <div className="monitor-countdown" aria-live="polite">
+            <span className="monitor-countdown-num">{captureLeft}</span>
+            <p className="monitor-countdown-note">Hat off · hold still</p>
           </div>
         ) : null}
+        <canvas ref={overlayRef} className="monitor-overlay" aria-hidden />
+        <canvas ref={canvasRef} className="sr-only" aria-hidden />
       </div>
 
       <div className="monitor-quality">
@@ -241,11 +203,44 @@ export function MonitorStage({
       <p className="monitor-status" role="status">
         {status}
       </p>
-      {onTryAgain ? (
-        <div className="monitor-try-again">
-          <button type="button" className="cta cta-primary" onClick={onTryAgain}>
-            Try again
+
+      {showCtaBar ? (
+        <div className="monitor-actions" role="group" aria-label="Choose a video source">
+          <button
+            type="button"
+            className={`cta cta-primary ${inputMode === 'upload' ? 'is-active' : ''}`}
+            onClick={onUploadClick}
+            disabled={busy}
+          >
+            Upload face video
           </button>
+          <button
+            type="button"
+            className={`cta cta-secondary ${inputMode === 'webcam' ? 'is-active' : ''}`}
+            onClick={onWebcam}
+            disabled={busy}
+          >
+            Webcam
+          </button>
+          <button
+            type="button"
+            className={`cta cta-secondary ${inputMode === 'synthetic' ? 'is-active' : ''}`}
+            onClick={onSample}
+            disabled={busy || demoLoading}
+          >
+            Try sample
+          </button>
+          {onLoadDemoSet && (
+            <button
+              type="button"
+              className="cta cta-secondary"
+              onClick={onLoadDemoSet}
+              disabled={busy || demoLoading}
+              title="Load all mp4/webm/mov from public/demo-clips (up to 10)"
+            >
+              {demoLoading ? 'Loading demos…' : 'Load demo set'}
+            </button>
+          )}
         </div>
       ) : null}
     </section>

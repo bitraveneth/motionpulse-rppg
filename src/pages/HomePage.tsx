@@ -1,7 +1,7 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HomeHeroVisual } from '../components/HomeHeroVisual'
 import { LocalLab } from '../components/LocalLab'
-import { PublicFeed } from '../components/PublicFeed'
 import { SiteNav } from '../components/SiteNav'
 import {
   HowItWorksSection,
@@ -9,7 +9,6 @@ import {
 } from '../components/SiteSections'
 import { isLocalLabEnabled } from '../lib/lab/enabled'
 import { useContent } from '../lib/content'
-import { useState } from 'react'
 
 export function HomePage() {
   const labEnabled = isLocalLabEnabled()
@@ -41,16 +40,6 @@ export function HomePage() {
 
         <HowItWorksSection />
         <VitalsExplainerSection />
-
-        <section
-          id="feed"
-          className="site-section home-section"
-          aria-labelledby="feed-title"
-        >
-          <div className="site-section-inner">
-            <PublicFeed />
-          </div>
-        </section>
 
         <section
           id="demo-tools"

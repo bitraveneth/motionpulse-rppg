@@ -25,8 +25,8 @@ var CONTENT_DEFAULTS = {
   "scan.save_metrics": "on",
   "scan.offer_video_optin": "off",
   "site.maintenance_note": "",
-  "nav.scan": "Scan",
   "nav.feed": "Feed",
+  "nav.scan": "Scan",
   "nav.how": "How it works",
   "nav.demo": "Demo",
   "nav.lab": "Local lab",
@@ -34,81 +34,6 @@ var CONTENT_DEFAULTS = {
   "cta.scan": "Scan yourself",
   "cta.sample": "Try sample"
 };
-
-// src/lib/feed/types.ts
-function normalizeNickname(nickname) {
-  const t = (nickname ?? "").trim();
-  return t.length > 0 ? t.slice(0, 40) : null;
-}
-
-// src/lib/feed/post.ts
-var RISKS = /* @__PURE__ */ new Set(["low", "moderate", "elevated", "high"]);
-var THUMB_MAX_CHARS = 12e4;
-var THUMB_RE = /^data:image\/(jpeg|jpg|png|webp);base64,/i;
-function round1(n) {
-  return Math.round(n * 10) / 10;
-}
-function finite(v) {
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-function parseFeedPostInput(body) {
-  const heart = finite(body.settledHeartRate);
-  if (heart === null || heart < 20 || heart > 260) {
-    return { ok: false, error: "Settled heart rate must be between 20 and 260." };
-  }
-  let respiratoryRate = null;
-  if (body.respiratoryRate !== null && body.respiratoryRate !== void 0) {
-    const breath = finite(body.respiratoryRate);
-    if (breath === null || breath < 2 || breath > 80) {
-      return {
-        ok: false,
-        error: "Respiratory rate must be between 2 and 80, or omitted."
-      };
-    }
-    respiratoryRate = round1(breath);
-  }
-  if (typeof body.signalLabel !== "string" || !body.signalLabel.trim()) {
-    return { ok: false, error: "Signal label is required." };
-  }
-  const signalLabel = body.signalLabel.trim().slice(0, 80);
-  if (typeof body.risk !== "string" || !RISKS.has(body.risk)) {
-    return { ok: false, error: "Risk must be low, moderate, elevated, or high." };
-  }
-  const thumb = parseThumb(body.thumb);
-  if (!thumb.ok) return thumb;
-  return {
-    ok: true,
-    data: {
-      nickname: normalizeNickname(
-        typeof body.nickname === "string" ? body.nickname : null
-      ),
-      settledHeartRate: round1(heart),
-      respiratoryRate,
-      signalLabel,
-      risk: body.risk,
-      thumb: thumb.thumb
-    }
-  };
-}
-function parseThumb(v) {
-  if (v == null || v === "") return { ok: true, thumb: null };
-  if (typeof v !== "string") {
-    return { ok: false, error: "Thumb must be a small image." };
-  }
-  const t = v.trim();
-  if (!t) return { ok: true, thumb: null };
-  const head = t.slice(0, 40).toLowerCase();
-  if (head.startsWith("data:video") || head.includes("video/")) {
-    return { ok: false, error: "Video is not stored." };
-  }
-  if (!THUMB_RE.test(t)) {
-    return { ok: false, error: "Thumb must be a small JPEG, PNG, or WebP image." };
-  }
-  if (t.length > THUMB_MAX_CHARS) {
-    return { ok: false, error: "Thumb is too large." };
-  }
-  return { ok: true, thumb: t };
-}
 
 // server/auth.ts
 import crypto from "node:crypto";
@@ -188,6 +113,66 @@ async function currentAccount(c) {
   return { id, email, name, role };
 }
 
+// src/lib/feed/limits.ts
+var MAX_FEED_VIDEO_BYTES = 2e6;
+
+// server/feedPost.ts
+var MAX_FEED_POSTS = 60;
+var SOURCES = /* @__PURE__ */ new Set(["webcam", "upload", "sample"]);
+function parseFeedVideo(dataUrl) {
+  if (dataUrl == null || dataUrl === "") return null;
+  if (typeof dataUrl !== "string") return { error: "Video must be a data URL." };
+  const match = /^data:(video\/(?:webm|mp4))(?:;[^,]*)?;base64,([a-z0-9+/=\s]+)$/i.exec(
+    dataUrl.trim()
+  );
+  if (!match) return { error: "Video must be a webm or mp4 data URL." };
+  const mime = match[1].toLowerCase();
+  const bytes = new Uint8Array(Buffer.from(match[2].replace(/\s/g, ""), "base64"));
+  if (bytes.byteLength === 0) return { error: "That video is empty." };
+  if (bytes.byteLength > MAX_FEED_VIDEO_BYTES) {
+    return { error: "video_too_large" };
+  }
+  return { mime, bytes };
+}
+function num(v) {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+function str(v, max) {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t ? t.slice(0, max) : null;
+}
+function parseFeedPost(body) {
+  const bpm = num(body.bpm);
+  if (bpm == null || bpm < 1 || bpm > 300) {
+    return { error: "A heart-rate number is required." };
+  }
+  const source = str(body.source, 40);
+  if (!source || !SOURCES.has(source)) return { error: "Unknown source." };
+  const riskLevel = str(body.riskLevel, 40);
+  if (!riskLevel) return { error: "A signal label is required." };
+  const durationSec = num(body.durationSec);
+  if (durationSec == null || durationSec <= 0 || durationSec > 30) {
+    return { error: "Duration must be between 0 and 30 seconds." };
+  }
+  const conflict = num(body.conflictScore);
+  const breath = num(body.respiratoryRate);
+  const thumb = str(body.thumb, 12e4);
+  const video = parseFeedVideo(body.videoData);
+  if (video && "error" in video) return video;
+  return {
+    nickname: str(body.nickname, 40),
+    bpm: Math.round(bpm * 10) / 10,
+    conflictScore: conflict == null ? 0 : Math.round(conflict * 1e3) / 1e3,
+    riskLevel,
+    respiratoryRate: breath == null ? null : Math.round(breath * 10) / 10,
+    durationSec: Math.round(durationSec * 10) / 10,
+    source,
+    thumb: thumb && thumb.startsWith("data:image") ? thumb : null,
+    video
+  };
+}
+
 // server/password.ts
 import crypto2 from "node:crypto";
 var SCRYPT_N = 16384;
@@ -244,13 +229,13 @@ var app = new Hono();
 var SESSION_SOURCES = /* @__PURE__ */ new Set(["sample", "upload", "webcam", "local-lab"]);
 var GT_SOURCES = /* @__PURE__ */ new Set(["self-count", "dataset", "device"]);
 var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-function num(v) {
+function num2(v) {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 function int(v) {
   return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null;
 }
-function str(v, max) {
+function str2(v, max) {
   if (typeof v !== "string") return null;
   const t = v.trim();
   return t ? t.slice(0, max) : null;
@@ -261,18 +246,18 @@ function numList(v, max) {
 }
 function clipData(raw, index) {
   const input = raw ?? {};
-  const thumb = str(input.thumb, 12e4);
+  const thumb = str2(input.thumb, 12e4);
   return {
     index,
-    durationSec: num(input.durationSec),
-    fps: num(input.fps),
+    durationSec: num2(input.durationSec),
+    fps: num2(input.fps),
     width: int(input.width),
     height: int(input.height),
-    settledHeartRate: num(input.settledHeartRate),
-    rawBpm: num(input.rawBpm),
-    respiratoryRate: num(input.respiratoryRate),
-    signalLabel: str(input.signalLabel, 80),
-    risk: str(input.risk, 40),
+    settledHeartRate: num2(input.settledHeartRate),
+    rawBpm: num2(input.rawBpm),
+    respiratoryRate: num2(input.respiratoryRate),
+    signalLabel: str2(input.signalLabel, 80),
+    risk: str2(input.risk, 40),
     regionWeights: numList(input.regionWeights, 4),
     waveform: numList(input.waveform, 400),
     thumb: thumb && thumb.startsWith("data:image") ? thumb : null
@@ -305,10 +290,10 @@ app.get("/api/content", async (c) => {
 });
 app.post("/api/auth/signup", async (c) => {
   const body = await readJson(c);
-  const email = str(body?.email, 200)?.toLowerCase();
+  const email = str2(body?.email, 200)?.toLowerCase();
   const password = typeof body?.password === "string" ? body.password : "";
-  const name = str(body?.name, 120);
-  const ageBand = str(body?.ageBand, 40);
+  const name = str2(body?.name, 120);
+  const ageBand = str2(body?.ageBand, 40);
   if (!email || !EMAIL_RE.test(email)) {
     return c.json({ error: "A valid email is required." }, 400);
   }
@@ -335,7 +320,7 @@ app.post("/api/auth/signup", async (c) => {
 });
 app.post("/api/auth/signin", async (c) => {
   const body = await readJson(c);
-  const email = str(body?.email, 200)?.toLowerCase();
+  const email = str2(body?.email, 200)?.toLowerCase();
   const password = typeof body?.password === "string" ? body.password : "";
   if (!email || !password) return c.json({ error: "Email and password required." }, 400);
   const account = await prisma.account.findUnique({ where: { email } });
@@ -365,7 +350,7 @@ app.post("/api/sessions", async (c) => {
   }
   const body = await readJson(c);
   if (!body) return c.json({ error: "JSON body required." }, 400);
-  const source = str(body.source, 40);
+  const source = str2(body.source, 40);
   if (!source || !SESSION_SOURCES.has(source)) {
     return c.json({ error: "Unknown source." }, 400);
   }
@@ -374,8 +359,8 @@ app.post("/api/sessions", async (c) => {
   const session = await prisma.scanSession.create({
     data: {
       source,
-      nickname: str(body.nickname, 80),
-      pipelineVersion: str(body.pipelineVersion, 40),
+      nickname: str2(body.nickname, 80),
+      pipelineVersion: str2(body.pipelineVersion, 40),
       userId: account?.id ?? null,
       clips: { create: clips.map((clip, i) => clipData(clip, i)) }
     },
@@ -401,39 +386,84 @@ app.post("/api/sessions/:id/clips", async (c) => {
   });
   return c.json({ saved: true, id: clip.id });
 });
-var feedSelect = {
+var feedListSelect = {
   id: true,
   createdAt: true,
   nickname: true,
-  settledHeartRate: true,
+  bpm: true,
+  conflictScore: true,
+  riskLevel: true,
   respiratoryRate: true,
-  signalLabel: true,
-  risk: true,
-  thumb: true
+  durationSec: true,
+  source: true,
+  thumb: true,
+  hasVideo: true
 };
-function publicFeedPost(row) {
-  return { ...row, createdAt: row.createdAt.toISOString() };
+function feedJson(post) {
+  return { ...post, createdAt: post.createdAt.toISOString() };
 }
 app.get("/api/feed", async (c) => {
-  const raw = Number(c.req.query("limit"));
-  const limit = Number.isFinite(raw) ? Math.min(48, Math.max(1, Math.floor(raw))) : 24;
-  const rows = await prisma.feedPost.findMany({
+  const posts = await prisma.feedPost.findMany({
     orderBy: { createdAt: "desc" },
-    take: limit,
-    select: feedSelect
+    take: 200,
+    select: feedListSelect
   });
-  return c.json({ posts: rows.map(publicFeedPost) });
+  return c.json({ posts: posts.map(feedJson) });
+});
+app.get("/api/feed/:id/video", async (c) => {
+  const post = await prisma.feedPost.findUnique({
+    where: { id: c.req.param("id") },
+    select: { videoMime: true, videoBytes: true, hasVideo: true }
+  });
+  if (!post?.hasVideo || !post.videoBytes) {
+    return c.json({ error: "No video on that post." }, 404);
+  }
+  const bytes = post.videoBytes instanceof Uint8Array ? post.videoBytes : new Uint8Array(post.videoBytes);
+  return c.body(bytes, 200, {
+    "Content-Type": post.videoMime || "video/webm",
+    "Cache-Control": "public, max-age=86400"
+  });
 });
 app.post("/api/feed", async (c) => {
   const body = await readJson(c);
   if (!body) return c.json({ error: "JSON body required." }, 400);
-  const parsed = parseFeedPostInput(body);
-  if (!parsed.ok) return c.json({ error: parsed.error }, 400);
-  const row = await prisma.feedPost.create({
-    data: parsed.data,
-    select: feedSelect
+  const parsed = parseFeedPost(body);
+  if ("error" in parsed) {
+    const message = parsed.error === "video_too_large" ? "That video is too large to post." : parsed.error;
+    return c.json({ error: message }, 400);
+  }
+  const account = await currentAccount(c);
+  const post = await prisma.feedPost.create({
+    data: {
+      nickname: parsed.nickname,
+      bpm: parsed.bpm,
+      conflictScore: parsed.conflictScore,
+      riskLevel: parsed.riskLevel,
+      respiratoryRate: parsed.respiratoryRate,
+      durationSec: parsed.durationSec,
+      source: parsed.source,
+      thumb: parsed.thumb,
+      videoMime: parsed.video?.mime ?? null,
+      videoBytes: parsed.video ? Buffer.from(parsed.video.bytes) : null,
+      hasVideo: Boolean(parsed.video),
+      userId: account?.id ?? null
+    },
+    select: feedListSelect
   });
-  return c.json({ post: publicFeedPost(row) });
+  const overflow = await prisma.feedPost.count();
+  if (overflow > MAX_FEED_POSTS) {
+    const stale = await prisma.feedPost.findMany({
+      orderBy: { createdAt: "asc" },
+      take: overflow - MAX_FEED_POSTS,
+      select: { id: true }
+    });
+    if (stale.length > 0) {
+      await prisma.feedPost.deleteMany({
+        where: { id: { in: stale.map((row) => row.id) } }
+      });
+    }
+  }
+  return c.json({ post: feedJson(post) });
 });
 app.get("/api/me/sessions", async (c) => {
   const account = await currentAccount(c);
@@ -465,6 +495,18 @@ app.use("/api/admin/*", async (c, next) => {
   if (account.role !== "admin") return c.json({ error: "admin_only" }, 403);
   c.set("account", account);
   await next();
+});
+app.get("/api/admin/feed", async (c) => {
+  const posts = await prisma.feedPost.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    select: feedListSelect
+  });
+  return c.json({ posts: posts.map(feedJson) });
+});
+app.delete("/api/admin/feed/:id", async (c) => {
+  await prisma.feedPost.deleteMany({ where: { id: c.req.param("id") } });
+  return c.json({ ok: true });
 });
 app.get("/api/admin/overview", async (c) => {
   const [accounts, sessions, clips, subjects] = await Promise.all([
@@ -523,9 +565,9 @@ app.get("/api/admin/users", async (c) => {
 });
 app.post("/api/admin/users", async (c) => {
   const body = await readJson(c);
-  const email = str(body?.email, 200)?.toLowerCase();
+  const email = str2(body?.email, 200)?.toLowerCase();
   const role = body?.role === "admin" ? "admin" : "subject";
-  const name = str(body?.name, 120);
+  const name = str2(body?.name, 120);
   if (!email || !EMAIL_RE.test(email)) {
     return c.json({ error: "A valid email is required." }, 400);
   }
@@ -631,8 +673,8 @@ app.delete("/api/admin/sessions/:id", async (c) => {
 app.put("/api/admin/clips/:id/ground-truth", async (c) => {
   const clipId = c.req.param("id");
   const body = await readJson(c);
-  const heartRate = num(body?.heartRate);
-  const source = str(body?.source, 40);
+  const heartRate = num2(body?.heartRate);
+  const source = str2(body?.source, 40);
   if (heartRate === null || heartRate < 20 || heartRate > 260) {
     return c.json({ error: "heartRate must be a number between 20 and 260." }, 400);
   }
@@ -642,8 +684,8 @@ app.put("/api/admin/clips/:id/ground-truth", async (c) => {
   const data = {
     heartRate,
     source,
-    datasetName: str(body?.datasetName, 120),
-    datasetSubjectId: str(body?.datasetSubjectId, 120)
+    datasetName: str2(body?.datasetName, 120),
+    datasetSubjectId: str2(body?.datasetSubjectId, 120)
   };
   const gt = await prisma.groundTruth.upsert({
     where: { clipId },
@@ -689,7 +731,8 @@ app.get("/api/admin/export/clips.csv", async (c) => {
     "gt_heart_rate",
     "gt_source",
     "gt_dataset_name",
-    "gt_dataset_subject_id"
+    "gt_dataset_subject_id",
+    "clip_created_at"
   ];
   const lines = [header.join(",")];
   for (const s of sessions) {
@@ -720,7 +763,8 @@ app.get("/api/admin/export/clips.csv", async (c) => {
           clip.groundTruth?.heartRate ?? "",
           clip.groundTruth?.source ?? "",
           clip.groundTruth?.datasetName ?? "",
-          clip.groundTruth?.datasetSubjectId ?? ""
+          clip.groundTruth?.datasetSubjectId ?? "",
+          clip.createdAt.toISOString()
         ].map(csvCell).join(",")
       );
     }

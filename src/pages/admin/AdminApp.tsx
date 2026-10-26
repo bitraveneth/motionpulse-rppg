@@ -11,6 +11,7 @@ import { api } from '../../lib/api'
 import type { AccountSummary } from '../../lib/adminTypes'
 import { AdminContent } from './AdminContent'
 import { AdminExport } from './AdminExport'
+import { AdminFeed } from './AdminFeed'
 import { AdminSessionDetail } from './AdminSessionDetail'
 import { AdminSessions } from './AdminSessions'
 import { AdminUsers } from './AdminUsers'
@@ -96,6 +97,7 @@ function AdminLogin({
 
 const NAV = [
   { to: 'sessions', label: 'Sessions' },
+  { to: 'feed', label: 'Feed' },
   { to: 'content', label: 'Content' },
   { to: 'users', label: 'Users' },
   { to: 'export', label: 'Export' },
@@ -172,6 +174,7 @@ export function AdminApp() {
         <Routes>
           <Route path="/" element={<Navigate to="sessions" replace />} />
           <Route path="sessions" element={<AdminSessions />} />
+          <Route path="feed" element={<AdminFeed />} />
           <Route path="sessions/:id" element={<AdminSessionDetail />} />
           <Route path="content" element={<AdminContent />} />
           <Route path="users" element={<AdminUsers />} />

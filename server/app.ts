@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { CONTENT_DEFAULTS } from '../src/lib/contentDefaults'
-import { parseFeedPostInput } from '../src/lib/feed/post'
 import {
   createAuthSession,
   currentAccount,
@@ -8,6 +7,7 @@ import {
   type SessionAccount,
 } from './auth'
 import { prisma } from './db'
+import { MAX_FEED_POSTS, parseFeedPost } from './feedPost'
 import { hashPassword, randomPassword, verifyPassword } from './password'
 
 export const app = new Hono<{ Variables: { account: SessionAccount } }>()
@@ -198,53 +198,106 @@ app.post('/api/sessions/:id/clips', async (c) => {
   return c.json({ saved: true, id: clip.id })
 })
 
-const feedSelect = {
+const feedListSelect = {
   id: true,
   createdAt: true,
   nickname: true,
-  settledHeartRate: true,
+  bpm: true,
+  conflictScore: true,
+  riskLevel: true,
   respiratoryRate: true,
-  signalLabel: true,
-  risk: true,
+  durationSec: true,
+  source: true,
   thumb: true,
+  hasVideo: true,
 } as const
 
-function publicFeedPost(row: {
+function feedJson(post: {
   id: string
   createdAt: Date
   nickname: string | null
-  settledHeartRate: number
+  bpm: number
+  conflictScore: number
+  riskLevel: string
   respiratoryRate: number | null
-  signalLabel: string | null
-  risk: string | null
+  durationSec: number
+  source: string
   thumb: string | null
+  hasVideo: boolean
 }) {
-  return { ...row, createdAt: row.createdAt.toISOString() }
+  return { ...post, createdAt: post.createdAt.toISOString() }
 }
 
-// Public result feed — newest first. Thumbs only; no video column.
 app.get('/api/feed', async (c) => {
-  const raw = Number(c.req.query('limit'))
-  const limit = Number.isFinite(raw) ? Math.min(48, Math.max(1, Math.floor(raw))) : 24
-  const rows = await prisma.feedPost.findMany({
+  const posts = await prisma.feedPost.findMany({
     orderBy: { createdAt: 'desc' },
-    take: limit,
-    select: feedSelect,
+    take: 200,
+    select: feedListSelect,
   })
-  return c.json({ posts: rows.map(publicFeedPost) })
+  return c.json({ posts: posts.map(feedJson) })
 })
 
-// One share. The scan page calls this only when the person clicks Share.
+app.get('/api/feed/:id/video', async (c) => {
+  const post = await prisma.feedPost.findUnique({
+    where: { id: c.req.param('id') },
+    select: { videoMime: true, videoBytes: true, hasVideo: true },
+  })
+  if (!post?.hasVideo || !post.videoBytes) {
+    return c.json({ error: 'No video on that post.' }, 404)
+  }
+  const bytes =
+    post.videoBytes instanceof Uint8Array
+      ? post.videoBytes
+      : new Uint8Array(post.videoBytes)
+  return c.body(bytes, 200, {
+    'Content-Type': post.videoMime || 'video/webm',
+    'Cache-Control': 'public, max-age=86400',
+  })
+})
+
 app.post('/api/feed', async (c) => {
   const body = await readJson(c)
   if (!body) return c.json({ error: 'JSON body required.' }, 400)
-  const parsed = parseFeedPostInput(body)
-  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
-  const row = await prisma.feedPost.create({
-    data: parsed.data,
-    select: feedSelect,
+  const parsed = parseFeedPost(body)
+  if ('error' in parsed) {
+    const message =
+      parsed.error === 'video_too_large'
+        ? 'That video is too large to post.'
+        : parsed.error
+    return c.json({ error: message }, 400)
+  }
+  const account = await currentAccount(c)
+  const post = await prisma.feedPost.create({
+    data: {
+      nickname: parsed.nickname,
+      bpm: parsed.bpm,
+      conflictScore: parsed.conflictScore,
+      riskLevel: parsed.riskLevel,
+      respiratoryRate: parsed.respiratoryRate,
+      durationSec: parsed.durationSec,
+      source: parsed.source,
+      thumb: parsed.thumb,
+      videoMime: parsed.video?.mime ?? null,
+      videoBytes: parsed.video ? Buffer.from(parsed.video.bytes) : null,
+      hasVideo: Boolean(parsed.video),
+      userId: account?.id ?? null,
+    },
+    select: feedListSelect,
   })
-  return c.json({ post: publicFeedPost(row) })
+  const overflow = await prisma.feedPost.count()
+  if (overflow > MAX_FEED_POSTS) {
+    const stale = await prisma.feedPost.findMany({
+      orderBy: { createdAt: 'asc' },
+      take: overflow - MAX_FEED_POSTS,
+      select: { id: true },
+    })
+    if (stale.length > 0) {
+      await prisma.feedPost.deleteMany({
+        where: { id: { in: stale.map((row) => row.id) } },
+      })
+    }
+  }
+  return c.json({ post: feedJson(post) })
 })
 
 // A signed-in subject sees only their own sessions.
@@ -281,6 +334,20 @@ app.use('/api/admin/*', async (c, next) => {
   if (account.role !== 'admin') return c.json({ error: 'admin_only' }, 403)
   c.set('account', account)
   await next()
+})
+
+app.get('/api/admin/feed', async (c) => {
+  const posts = await prisma.feedPost.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    select: feedListSelect,
+  })
+  return c.json({ posts: posts.map(feedJson) })
+})
+
+app.delete('/api/admin/feed/:id', async (c) => {
+  await prisma.feedPost.deleteMany({ where: { id: c.req.param('id') } })
+  return c.json({ ok: true })
 })
 
 app.get('/api/admin/overview', async (c) => {
@@ -529,6 +596,7 @@ app.get('/api/admin/export/clips.csv', async (c) => {
     'gt_source',
     'gt_dataset_name',
     'gt_dataset_subject_id',
+    'clip_created_at',
   ]
   const lines = [header.join(',')]
   for (const s of sessions) {
@@ -560,6 +628,7 @@ app.get('/api/admin/export/clips.csv', async (c) => {
           clip.groundTruth?.source ?? '',
           clip.groundTruth?.datasetName ?? '',
           clip.groundTruth?.datasetSubjectId ?? '',
+          clip.createdAt.toISOString(),
         ]
           .map(csvCell)
           .join(','),

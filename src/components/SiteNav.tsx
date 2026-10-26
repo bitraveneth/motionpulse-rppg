@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useContent } from '../lib/content'
 type Props = {
-  /** Primary pill CTA label */
-  primaryCta?: { label: string; to: string }
+  /** Primary pill CTA. Pass null to hide it. */
+  primaryCta?: { label: string; to: string } | null
 }
 
 export function SiteNav({ primaryCta }: Props) {
@@ -32,14 +32,17 @@ export function SiteNav({ primaryCta }: Props) {
 
   const links = [
     { to: '/scan', label: c('nav.scan') },
-    { to: sectionHref('feed'), label: c('nav.feed') },
+    { to: '/feed', label: c('nav.feed') },
     { to: sectionHref('how-it-works'), label: c('nav.how') },
     { to: sectionHref('demo-tools'), label: c('nav.demo') },
     { to: sectionHref('local-lab'), label: c('nav.lab') },
     { to: '/signin', label: c('nav.signin') },
   ]
 
-  const cta = primaryCta ?? { label: c('cta.sample'), to: '/scan?action=sample' }
+  const cta =
+    primaryCta === undefined
+      ? { label: c('cta.sample'), to: '/scan?action=sample' }
+      : primaryCta
 
   return (
     <header className="site-nav-pill-wrap">
@@ -73,13 +76,15 @@ export function SiteNav({ primaryCta }: Props) {
               </li>
             ))}
           </ul>
-          <Link
-            to={cta.to}
-            className="cta cta-primary site-nav-cta"
-            onClick={close}
-          >
-            {cta.label}
-          </Link>
+          {cta ? (
+            <Link
+              to={cta.to}
+              className="cta cta-primary site-nav-cta"
+              onClick={close}
+            >
+              {cta.label}
+            </Link>
+          ) : null}
         </div>
       </nav>
       {maintenance ? (

@@ -1,22 +1,30 @@
 import { useState } from 'react'
-import { api } from '../lib/api'
-import type { PublicFeedPost } from '../lib/feed/post'
+import { Link } from 'react-router-dom'
+import { publishFeedPost } from '../lib/feed/publicFeed'
+import type { RiskLevel, RunSource } from '../lib/feed/types'
 
 type Props = {
-  settledHeartRate: number
-  respiratoryRate: number | null
-  signalLabel: string
-  risk: string
+  bpm: number
+  conflictScore: number
+  riskLevel: RiskLevel
+  source: RunSource
   thumbnailData?: string | null
-  onShared?: (post: PublicFeedPost) => void
+  durationSec: number
+  respiratoryRate?: number | null
+  /** 10 second webcam recording. Posted with the reading when it fits. */
+  videoBlob?: Blob | null
+  onShared?: (postId: string) => void
 }
 
 export function ShareToFeed({
-  settledHeartRate,
-  respiratoryRate,
-  signalLabel,
-  risk,
+  bpm,
+  conflictScore,
+  riskLevel,
+  source,
   thumbnailData,
+  durationSec,
+  respiratoryRate,
+  videoBlob,
   onShared,
 }: Props) {
   const [nickname, setNickname] = useState('')
@@ -29,19 +37,23 @@ export function ShareToFeed({
     setError(null)
     setMessage(null)
     try {
-      const { post } = await api<{ post: PublicFeedPost }>('/api/feed', {
-        method: 'POST',
-        body: JSON.stringify({
-          nickname,
-          settledHeartRate,
-          respiratoryRate,
-          signalLabel,
-          risk,
-          thumb: thumbnailData ?? null,
-        }),
+      const { post, droppedVideo } = await publishFeedPost({
+        nickname,
+        bpm,
+        conflictScore,
+        riskLevel,
+        respiratoryRate: respiratoryRate ?? null,
+        durationSec: durationSec > 0 ? durationSec : 10,
+        source,
+        thumb: thumbnailData ?? null,
+        videoBlob: videoBlob ?? null,
       })
-      setMessage('Shared to the public feed.')
-      onShared?.(post)
+      setMessage(
+        droppedVideo
+          ? 'Posted. The video was too large, so the feed shows the photo and numbers.'
+          : 'Posted.',
+      )
+      onShared?.(post.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not share')
     } finally {
@@ -50,19 +62,18 @@ export function ShareToFeed({
   }
 
   return (
-    <section className="share-panel" aria-label="Share">
+    <section className="share-panel" aria-label="Share to feed">
       <header className="panel-head">
-        <h2>Share</h2>
+        <h2>Post to the feed</h2>
         <p>
-          Post this result to the public feed: heart rate, experimental
-          respiratory rate, signal label, and risk, plus an optional nickname
-          and tiny face thumb. No video is uploaded.
+          This shows up on the feed for anyone to see. A webcam scan includes
+          the 10 second face video. Leave the name blank for Anonymous.
         </p>
       </header>
 
       <div className="share-row">
         <label className="share-field">
-          <span>Nickname (optional)</span>
+          <span>Name (optional)</span>
           <input
             type="text"
             maxLength={40}
@@ -78,11 +89,15 @@ export function ShareToFeed({
           onClick={() => void handleShare()}
           disabled={busy}
         >
-          {busy ? 'Sharing…' : 'Share'}
+          {busy ? 'Posting…' : 'Post to feed'}
         </button>
       </div>
 
-      {message && <p className="share-ok">{message}</p>}
+      {message && (
+        <p className="share-ok">
+          {message} <Link to="/feed">See it on the feed</Link>
+        </p>
+      )}
       {error && (
         <p className="share-err" role="alert">
           {error}

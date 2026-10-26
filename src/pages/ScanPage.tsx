@@ -42,8 +42,15 @@ import {
   type FrameLandmarks,
   type RoiRgbTrace,
 } from '../lib/rppg/types'
+import {
+  captureRemainingMs,
+  captureShouldStop,
+  preferredRecorderMime,
+  secondsLeft,
+} from '../lib/video/captureClock'
 import { optimizeVideoFile } from '../lib/video/optimize'
 import { streamAnalyzeVideo } from '../lib/video/streamAnalyze'
+import type { RunSource } from '../lib/feed/types'
 
 type LiveBuffer = {
   frames: FrameLandmarks[]
@@ -52,7 +59,6 @@ type LiveBuffer = {
 }
 
 const SESSION_MAX = 10
-const WEBCAM_MS = 10_000
 
 function emptyRoiRgb(): RoiRgbTrace {
   return {
@@ -61,6 +67,12 @@ function emptyRoiRgb(): RoiRgbTrace {
     rightCheek: [],
     lowerFace: [],
   }
+}
+
+function modeToSource(mode: InputMode): RunSource {
+  if (mode === 'webcam') return 'webcam'
+  if (mode === 'upload') return 'upload'
+  return 'sample'
 }
 
 function newId() {
@@ -82,7 +94,6 @@ export function ScanPage() {
   const [stage, setStage] = useState<AnalysisStage>('idle')
   const [stageDetail, setStageDetail] = useState<string | undefined>()
   const [showStory, setShowStory] = useState(true)
-  const [webcamPhase, setWebcamPhase] = useState<'idle' | 'capturing' | 'done'>('idle')
   const [thumbnailData, setThumbnailData] = useState<string | null>(null)
   const [scrub, setScrub] = useState(1)
   const [durationSec, setDurationSec] = useState(12)
@@ -93,14 +104,27 @@ export function ScanPage() {
   const [demoLoading, setDemoLoading] = useState(false)
   /** True while upload analysis is still accumulating frames (live vitals). */
   const [liveEstimating, setLiveEstimating] = useState(false)
+  /** Seconds left on a webcam capture. Null when the camera is not recording. */
+  const [captureLeft, setCaptureLeft] = useState<number | null>(null)
+  const [capturing, setCapturing] = useState(false)
+  /** Session clip id that should offer a second 10 second take. */
+  const [anotherForId, setAnotherForId] = useState<string | null>(null)
+  /** Shown before the camera starts so a hat is not covering the forehead. */
+  const [hatPrompt, setHatPrompt] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   /** Hidden element used only while decoding/analyzing uploads (keeps preview free to browse). */
   const analysisVideoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const webcamStreamRef = useRef<MediaStream | null>(null)
-  const webcamGenRef = useRef(0)
-  const webcamTimerRef = useRef(0)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const recordChunksRef = useRef<Blob[]>([])
+  const captureStartedAtRef = useRef(0)
+  const captureGenRef = useRef(0)
+  const webcamTakesRef = useRef(0)
+  const webcamBlobsRef = useRef<Map<string, Blob>>(new Map())
+  const liveRef = useRef<LiveBuffer | null>(null)
+  const thumbRef = useRef<string | null>(null)
   const rafRef = useRef<number>(0)
   const lastTsRef = useRef(0)
   const thumbCapturedRef = useRef(false)
@@ -117,6 +141,10 @@ export function ScanPage() {
   sessionRunsRef.current = sessionRuns
   const activeSessionIdRef = useRef<string | null>(null)
   activeSessionIdRef.current = activeSessionId
+  const controlsRef = useRef(controls)
+  controlsRef.current = controls
+  const inputModeRef = useRef(inputMode)
+  inputModeRef.current = inputMode
 
   const synthetic = useMemo(
     () =>
@@ -203,12 +231,10 @@ export function ScanPage() {
   useEffect(() => {
     if (inputMode !== 'webcam') {
       stopWebcam()
-      setWebcamPhase('idle')
     }
+    return () => stopWebcam()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMode])
-
-  useEffect(() => () => stopWebcam(), [])
 
   // Seed the sample into the session once so multi-clip browse can include it.
   useEffect(() => {
@@ -254,18 +280,47 @@ export function ScanPage() {
   }
 
   function stopWebcam() {
-    webcamGenRef.current += 1
-    if (webcamTimerRef.current) {
-      window.clearTimeout(webcamTimerRef.current)
-      webcamTimerRef.current = 0
-    }
+    captureGenRef.current += 1
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = 0
+    const rec = recorderRef.current
+    recorderRef.current = null
+    if (rec && rec.state !== 'inactive') {
+      try {
+        rec.stop()
+      } catch {
+        /* already stopped */
+      }
+    }
     webcamStreamRef.current?.getTracks().forEach((t) => t.stop())
     webcamStreamRef.current = null
-    if (videoRef.current?.srcObject) {
+    if (videoRef.current && videoRef.current.srcObject) {
       videoRef.current.srcObject = null
     }
+    setCapturing(false)
+    setCaptureLeft(null)
+  }
+
+  function stopRecorder(rec: MediaRecorder | null, chunks: Blob[]): Promise<Blob | null> {
+    if (!rec) return Promise.resolve(null)
+    const mime = rec.mimeType || 'video/webm'
+    if (rec.state === 'inactive') {
+      return Promise.resolve(chunks.length ? new Blob(chunks, { type: mime }) : null)
+    }
+    return new Promise((resolve) => {
+      rec.addEventListener(
+        'stop',
+        () => {
+          resolve(chunks.length ? new Blob(chunks, { type: mime }) : null)
+        },
+        { once: true },
+      )
+      try {
+        rec.stop()
+      } catch {
+        resolve(chunks.length ? new Blob(chunks, { type: mime }) : null)
+      }
+    })
   }
 
   function shortClipName(name: string) {
@@ -288,6 +343,9 @@ export function ScanPage() {
     pendingFilesRef.current.clear()
     queueOrderRef.current = []
     setQueueLeft(0)
+    webcamTakesRef.current = 0
+    webcamBlobsRef.current.clear()
+    setAnotherForId(null)
     resetScanSave()
   }
 
@@ -336,7 +394,6 @@ export function ScanPage() {
     appliedSessionIdRef.current = id
     setError(null)
     stopWebcam()
-    setWebcamPhase('idle')
 
     if (clip.status === 'queued') {
       setLive(null)
@@ -488,7 +545,19 @@ export function ScanPage() {
     })
   }
 
+  function requestWebcam() {
+    if (capturing || busy) return
+    setError(null)
+    setHatPrompt(true)
+  }
+
+  async function startAfterHat() {
+    setHatPrompt(false)
+    await handleInputMode('webcam')
+  }
+
   async function handleInputMode(mode: InputMode) {
+    setHatPrompt(false)
     setError(null)
     setInputMode(mode)
     setStage('idle')
@@ -580,143 +649,236 @@ export function ScanPage() {
     })
     if (data) {
       thumbCapturedRef.current = true
+      thumbRef.current = data
       setThumbnailData(data)
     }
   }
 
+  async function finishWebcamCapture(gen: number) {
+    if (gen !== captureGenRef.current) return
+    captureGenRef.current += 1
+    const token = captureGenRef.current
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = 0
+
+    const rec = recorderRef.current
+    recorderRef.current = null
+    const chunks = recordChunksRef.current
+    const blob = await stopRecorder(rec, chunks)
+    if (token !== captureGenRef.current) return
+
+    const video = videoRef.current
+    const width = video?.videoWidth || null
+    const height = video?.videoHeight || null
+    webcamStreamRef.current?.getTracks().forEach((t) => t.stop())
+    webcamStreamRef.current = null
+    if (video?.srcObject) video.srcObject = null
+
+    setCapturing(false)
+    setCaptureLeft(null)
+    setLiveEstimating(false)
+    setBusy(false)
+
+    const buffer = liveRef.current
+    if (!buffer || buffer.frames.length < 16) {
+      liveRef.current = null
+      setLive(null)
+      setDurationSec(0)
+      setStage('idle')
+      setShowStory(false)
+      setHasVideo(false)
+      setError(
+        'Not enough of your face in those 10 seconds. Stay centered and try once more.',
+      )
+      setStatus('10 second capture ended before a pulse could be estimated.')
+      setAnotherForId('retry')
+      return
+    }
+
+    let pipeline: PipelineResult | null = null
+    try {
+      pipeline = runPipeline({
+        frames: buffer.frames,
+        roiRgb: buffer.roiRgb,
+        sampleRateHz: buffer.sampleRateHz,
+        controls: controlsRef.current,
+      })
+    } catch (e) {
+      console.error(e)
+    }
+    const riskLabel = pipeline
+      ? conflictRiskLabel(pipeline.conflict.combined)
+      : null
+    const series = pipeline
+      ? pipeline.suppression.gated.length > 24
+        ? pipeline.suppression.gated
+        : pipeline.motion.global
+      : []
+    const breath = pipeline
+      ? estimateRespiratoryRate(series, buffer.sampleRateHz)
+      : null
+    const durationSec = buffer.frames.length / buffer.sampleRateHz
+    const take = webcamTakesRef.current + 1
+    webcamTakesRef.current = take
+    const id = newId()
+
+    let objectUrl: string | null = null
+    if (blob && blob.size > 0) {
+      objectUrl = URL.createObjectURL(blob)
+      ownedUrlsRef.current.add(objectUrl)
+      webcamBlobsRef.current.set(id, blob)
+    }
+
+    if (video && objectUrl) {
+      video.src = objectUrl
+      video.muted = true
+      setHasVideo(true)
+      void video.play().catch(() => undefined)
+    }
+
+    setLive(buffer)
+    setDurationSec(durationSec)
+    setScrub(1)
+    setShowStory(true)
+    setStage('done')
+    setStageDetail(undefined)
+    setThumbnailData(thumbRef.current)
+    setError(null)
+    setAnotherForId(take === 1 ? id : null)
+    const bpm = pipeline?.gatedBpm
+    setStatus(
+      bpm != null
+        ? `10 second capture saved — ${bpm.toFixed(0)} BPM${take === 1 ? '. Try one more?' : '.'}`
+        : '10 second capture saved.',
+    )
+
+    const entry: SessionRun = {
+      id,
+      name: `Webcam ${take}`,
+      status: 'done',
+      source: 'webcam',
+      bpm: bpm ?? null,
+      riskLevel: riskLabel?.level ?? null,
+      riskScore: pipeline?.conflict.combined ?? null,
+      thumbnail: thumbRef.current,
+      respiratoryBpm: breath ? breath.breathsPerMin : null,
+      at: Date.now(),
+      durationSec,
+      objectUrl,
+      buffer,
+    }
+    setSessionRuns((prev) => [...prev, entry].slice(-SESSION_MAX))
+    setActiveSessionId(id)
+    appliedSessionIdRef.current = id
+
+    saveSettledClip({
+      source: 'webcam',
+      pipeline,
+      settledBpm: bpm ?? null,
+      respiratoryBpm: breath ? breath.breathsPerMin : null,
+      riskLevel: riskLabel?.level ?? null,
+      signalLabel: riskLabel?.label ?? null,
+      durationSec,
+      fps: buffer.sampleRateHz,
+      width,
+      height,
+      thumbnail: thumbRef.current,
+    })
+  }
+
   async function startWebcam() {
     stopWebcam()
-    const token = webcamGenRef.current
-    setWebcamPhase('capturing')
+    setCapturing(true)
+    setAnotherForId(null)
     setBusy(true)
     setError(null)
-    setLive(null)
     setShowStory(false)
-    setLiveEstimating(false)
-    setThumbnailData(null)
-    thumbCapturedRef.current = false
     setStage('finding_face')
     setStageDetail('Asking for camera access…')
     setStatus('Asking for camera access…')
+    thumbCapturedRef.current = false
+    thumbRef.current = null
+    setThumbnailData(null)
     try {
       await getFaceLandmarker()
-      if (webcamGenRef.current !== token) return
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 },
         audio: false,
       })
-      if (webcamGenRef.current !== token) {
+      if (inputModeRef.current !== 'webcam') {
         stream.getTracks().forEach((t) => t.stop())
+        setCapturing(false)
+        setBusy(false)
         return
       }
+      // Let the mode-change effect stop any previous camera before we keep this one.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      if (inputModeRef.current !== 'webcam') {
+        stream.getTracks().forEach((t) => t.stop())
+        setCapturing(false)
+        setBusy(false)
+        return
+      }
+      const gen = ++captureGenRef.current
       webcamStreamRef.current = stream
       const video = videoRef.current
       if (!video) throw new Error('Video element missing')
+      video.removeAttribute('src')
       video.srcObject = stream
       await video.play()
-      if (webcamGenRef.current !== token) {
+      if (gen !== captureGenRef.current) {
         stream.getTracks().forEach((t) => t.stop())
-        if (video.srcObject === stream) video.srcObject = null
         return
       }
       setHasVideo(true)
       setDurationSec(0)
-      setScrub(1)
+      setCapturing(true)
+
+      const empty = {
+        frames: [] as LiveBuffer['frames'],
+        roiRgb: emptyRoiRgb(),
+        sampleRateHz: 15,
+      }
+      liveRef.current = empty
+      setLive(empty)
       setStage('estimating_pulse')
-      setStageDetail('10s left')
-      setStatus(
-        'Capturing — 10s left. Keep your face centered. The camera stops when the timer ends.',
-      )
+      setStageDetail('Keep your face centered for 10 seconds')
+      setLiveEstimating(true)
       setBusy(false)
+      captureStartedAtRef.current = performance.now()
+      setCaptureLeft(10)
+      recordChunksRef.current = []
 
-      const frames: FrameLandmarks[] = []
-      const roiRgb = emptyRoiRgb()
-      const started = performance.now()
-      let shownLeft = 10
-      let missingFace = false
-      let settled = false
-
-      const finish = () => {
-        if (settled || webcamGenRef.current !== token) return
-        settled = true
-        if (webcamTimerRef.current) {
-          window.clearTimeout(webcamTimerRef.current)
-          webcamTimerRef.current = 0
-        }
-        if (rafRef.current) cancelAnimationFrame(rafRef.current)
-        rafRef.current = 0
-        webcamStreamRef.current?.getTracks().forEach((t) => t.stop())
-        webcamStreamRef.current = null
-        if (videoRef.current?.srcObject) videoRef.current.srcObject = null
-        setHasVideo(false)
-        setBusy(false)
-        setLiveEstimating(false)
-        setWebcamPhase('done')
-        setStageDetail(undefined)
-
-        const canvas = canvasRef.current
-        const lastLm = frames[frames.length - 1] ?? null
-        if (frames.length < 16) {
-          setLive(null)
-          setShowStory(false)
-          setStage('idle')
-          setThumbnailData(null)
-          setError(
-            'Not enough of your face in those 10 seconds. Try again with your face centered.',
-          )
-          setStatus('Camera off. Try again for another 10-second capture.')
-          return
-        }
-
-        if (canvas && lastLm) {
-          const data = captureFaceThumbnail(canvas, lastLm, {
-            blurPx: 0.9,
-            sizePx: 160,
-            quality: 0.7,
+      const mime =
+        typeof MediaRecorder !== 'undefined'
+          ? preferredRecorderMime((type) => MediaRecorder.isTypeSupported(type))
+          : null
+      if (mime) {
+        try {
+          const rec = new MediaRecorder(stream, {
+            mimeType: mime,
+            videoBitsPerSecond: 450_000,
           })
-          if (data) {
-            thumbCapturedRef.current = true
-            setThumbnailData(data)
+          rec.ondataavailable = (event) => {
+            if (event.data.size > 0) recordChunksRef.current.push(event.data)
           }
+          rec.start(200)
+          recorderRef.current = rec
+        } catch (e) {
+          console.error(e)
         }
-
-        setLive({
-          frames: frames.slice(),
-          roiRgb: {
-            forehead: roiRgb.forehead.slice(),
-            leftCheek: roiRgb.leftCheek.slice(),
-            rightCheek: roiRgb.rightCheek.slice(),
-            lowerFace: roiRgb.lowerFace.slice(),
-          },
-          sampleRateHz: 15,
-        })
-        setDurationSec(frames.length / 15)
-        setScrub(1)
-        setStage('done')
-        setShowStory(true)
-        setError(null)
-        setStatus(
-          'Camera off. This result stays on screen until you try again. Nothing is saved unless you share it.',
-        )
-        // The settled result stays in the browser. Share is the only write.
       }
 
-      webcamTimerRef.current = window.setTimeout(finish, WEBCAM_MS)
-
       const tick = async (ts: number) => {
-        if (settled || webcamGenRef.current !== token || !webcamStreamRef.current) return
-        const elapsed = performance.now() - started
-        if (elapsed >= WEBCAM_MS) {
-          finish()
+        if (gen !== captureGenRef.current || !webcamStreamRef.current) return
+        const now = performance.now()
+        const left = secondsLeft(
+          captureRemainingMs(captureStartedAtRef.current, now),
+        )
+        setCaptureLeft((prev) => (prev === left ? prev : left))
+        if (captureShouldStop(captureStartedAtRef.current, now)) {
+          void finishWebcamCapture(gen)
           return
-        }
-        const left = Math.max(1, Math.ceil((WEBCAM_MS - elapsed) / 1000))
-        if (left !== shownLeft) {
-          shownLeft = left
-          setStageDetail(`${left}s left`)
-          setStatus(
-            `Capturing — ${left}s left. Keep your face centered. The camera stops when the timer ends.`,
-          )
         }
         if (ts - lastTsRef.current < 66) {
           rafRef.current = requestAnimationFrame(tick)
@@ -731,52 +893,63 @@ export function ScanPage() {
         }
         try {
           const landmarks = await detectVideoFrame(v, ts)
-          if (settled || webcamGenRef.current !== token || !webcamStreamRef.current) return
-          if (landmarks && canvas) {
-            if (missingFace) {
-              missingFace = false
-              setStatus(
-                `Capturing — ${shownLeft}s left. Keep your face centered. The camera stops when the timer ends.`,
-              )
-            }
+          if (gen !== captureGenRef.current) return
+          if (landmarks) {
             canvas.width = v.videoWidth
             canvas.height = v.videoHeight
             const ctx = canvas.getContext('2d')
             if (ctx) {
               ctx.drawImage(v, 0, 0)
-              frames.push(landmarks)
+              const roiRgb = emptyRoiRgb()
               for (const id of ROI_IDS) {
-                roiRgb[id].push(
-                  sampleRoiRgbFromFrame(
-                    ctx,
-                    canvas.width,
-                    canvas.height,
-                    landmarks,
-                    ROI_LANDMARK_INDICES[id],
-                  ),
+                const sample = sampleRoiRgbFromFrame(
+                  ctx,
+                  canvas.width,
+                  canvas.height,
+                  landmarks,
+                  ROI_LANDMARK_INDICES[id],
+                )
+                roiRgb[id] = [sample]
+              }
+              const prev = liveRef.current
+              const frames = [...(prev?.frames ?? []), landmarks].slice(-200)
+              const nextRgb = emptyRoiRgb()
+              for (const id of ROI_IDS) {
+                nextRgb[id] = [...(prev?.roiRgb[id] ?? []), ...roiRgb[id]].slice(
+                  -200,
                 )
               }
+              const next: LiveBuffer = {
+                frames,
+                roiRgb: nextRgb,
+                sampleRateHz: 15,
+              }
+              liveRef.current = next
+              setLive(next)
+              maybeCaptureThumb(canvas, landmarks)
+              setDurationSec(frames.length / 15)
+              setScrub(1)
+              setStatus(
+                frames.length >= 16
+                  ? `Recording — ${left}s left. Keep your face centered.`
+                  : `Recording — ${left}s left. Looking for your face…`,
+              )
             }
-          } else if (!missingFace) {
-            missingFace = true
-            setStatus(
-              'No face found — center your face in the camera. Capture is still counting down.',
-            )
+          } else {
+            setStatus(`No face yet — ${left}s left. Center your face.`)
           }
         } catch (e) {
-          if (webcamGenRef.current !== token) return
           setError(e instanceof Error ? e.message : 'Camera analysis failed')
         }
-        if (!settled && webcamGenRef.current === token && webcamStreamRef.current) {
+        if (gen === captureGenRef.current) {
           rafRef.current = requestAnimationFrame(tick)
         }
       }
       rafRef.current = requestAnimationFrame(tick)
     } catch (e) {
-      if (webcamGenRef.current !== token) return
-      stopWebcam()
       setBusy(false)
-      setWebcamPhase('idle')
+      setCapturing(false)
+      setCaptureLeft(null)
       setStage('idle')
       setHasVideo(false)
       setError(
@@ -1159,20 +1332,17 @@ export function ScanPage() {
 
   const lastLandmarks = scrubLandmarks ?? source?.frames[source.frames.length - 1] ?? null
   const hasResult = Boolean(result)
+  const runSource = modeToSource(inputMode)
   const activeClip =
     sessionRuns.find((r) => r.id === activeSessionId) ?? null
   const vitalsEmptyHint =
-    webcamPhase === 'capturing'
-      ? 'Capturing for 10 seconds. The result appears when the camera stops.'
-      : webcamPhase === 'done' && inputMode === 'webcam' && !result
-        ? 'Not enough face frames. Try again with your face centered.'
-        : activeClip?.status === 'analyzing' && !result
-          ? `Analyzing “${activeClip.name}” — first estimate in a moment…`
-          : activeClip?.status === 'queued'
-            ? `“${activeClip.name}” is queued — vitals appear when analysis starts.`
-            : activeClip?.status === 'error'
-              ? `Could not analyze “${activeClip.name}”.`
-              : undefined
+    activeClip?.status === 'analyzing' && !result
+      ? `Analyzing “${activeClip.name}” — first estimate in a moment…`
+      : activeClip?.status === 'queued'
+        ? `“${activeClip.name}” is queued — vitals appear when analysis starts.`
+        : activeClip?.status === 'error'
+          ? `Could not analyze “${activeClip.name}”.`
+          : undefined
 
   return (
     <>
@@ -1182,8 +1352,9 @@ export function ScanPage() {
         <header className="scan-page-head">
           <h1>Scan session</h1>
           <p>
-            A webcam capture runs for 10 seconds, then the camera turns off and
-            the result stays on screen. Nothing is saved unless you share it.
+            Webcam records for 10 seconds, then stops and shows the result.
+            That reading is saved with the time. Post it if you want the face
+            video on the public feed.
           </p>
         </header>
 
@@ -1216,29 +1387,52 @@ export function ScanPage() {
           ) : null}
 
           <div className="scan-session-frame product-frame">
+            {hatPrompt ? (
+              <section className="hat-prompt" aria-labelledby="hat-prompt-title">
+                <h2 id="hat-prompt-title">Take off your hat</h2>
+                <p>
+                  The scan reads color from your forehead. A hat, cap, or hood
+                  covers that area, so the number will be wrong. Glasses can
+                  stay on. Then hold still for 10 seconds.
+                </p>
+                <div className="hat-prompt-actions">
+                  <button
+                    type="button"
+                    className="cta cta-primary"
+                    onClick={() => void startAfterHat()}
+                  >
+                    Hat is off — start
+                  </button>
+                  <button
+                    type="button"
+                    className="cta cta-secondary"
+                    onClick={() => setHatPrompt(false)}
+                  >
+                    Not now
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
             <div className="scan-session-monitor-wrap">
               <MonitorStage
                 videoRef={videoRef}
                 canvasRef={canvasRef}
                 landmarks={lastLandmarks}
                 inputMode={inputMode}
-                busy={busy}
+                busy={busy || capturing}
                 hasVideo={hasVideo}
                 scrub={scrub}
                 onScrub={handleScrub}
                 durationSec={durationSec}
                 onUploadClick={openUploadPicker}
-                onWebcam={() => void handleInputMode('webcam')}
+                onWebcam={requestWebcam}
                 onSample={() => void handleInputMode('synthetic')}
                 onLoadDemoSet={() => void loadDemoSet()}
                 demoLoading={demoLoading}
                 status={status}
                 showCtaBar
-                onTryAgain={
-                  webcamPhase === 'done' && inputMode === 'webcam'
-                    ? () => void startWebcam()
-                    : undefined
-                }
+                captureLeft={captureLeft}
               />
             </div>
 
@@ -1283,13 +1477,38 @@ export function ScanPage() {
         </div>
 
         <div className="scan-tools site-section-inner">
-          {hasResult && result && risk && showStory && (
+          {anotherForId && !capturing ? (
+            <section className="try-again-panel">
+              <h2>{anotherForId === 'retry' ? 'Try that again' : 'Try one more'}</h2>
+              <p>
+                {anotherForId === 'retry'
+                  ? 'The camera stopped after 10 seconds, but your face was not in frame long enough to estimate a pulse.'
+                  : 'That reading is saved, with the time. One more 10 second take gives you a second result.'}
+              </p>
+              <button
+                type="button"
+                className="cta cta-primary"
+                onClick={requestWebcam}
+              >
+                Try one more
+              </button>
+            </section>
+          ) : null}
+
+          {hasResult && result && risk && showStory && !capturing && (
             <ShareToFeed
-              settledHeartRate={result.gatedBpm}
-              respiratoryRate={respiratory ? respiratory.breathsPerMin : null}
-              signalLabel={risk.label}
-              risk={risk.level}
+              bpm={result.gatedBpm}
+              conflictScore={result.conflict.combined}
+              riskLevel={risk.level}
+              source={runSource}
               thumbnailData={thumbnailData}
+              durationSec={durationSec}
+              respiratoryRate={respiratory ? respiratory.breathsPerMin : null}
+              videoBlob={
+                activeSessionId
+                  ? (webcamBlobsRef.current.get(activeSessionId) ?? null)
+                  : null
+              }
             />
           )}
 

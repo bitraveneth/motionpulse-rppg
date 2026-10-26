@@ -700,12 +700,18 @@
   }
 
   .home-page,
-  .scan-page {
+  .scan-page,
+  .feed-page {
     padding-top: calc(var(--nav-h) + 1.25rem);
     width: 100%;
     max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
+  }
+
+  .feed-page .post-feed {
+    width: min(26rem, calc(100% - 1.5rem));
+    margin-inline: auto;
   }
 
   /* —— Marketing home —— */
@@ -1094,6 +1100,39 @@
     -webkit-overflow-scrolling: touch;
     min-width: 0;
     align-items: flex-start;
+  }
+
+  @media (max-width: 720px) {
+    .scan-page {
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+
+    .scan-stage .monitor-frame {
+      max-height: 46vh;
+    }
+
+    .scan-vitals-strip {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      overflow: visible;
+      margin: 0;
+      padding: 0;
+    }
+
+    .scan-vitals-strip .vitals-scan-card {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .hat-prompt-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .hat-prompt-actions .cta {
+      width: 100%;
+    }
   }
 
   @media (min-width: 900px) {
