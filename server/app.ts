@@ -1,13 +1,13 @@
 import { Hono } from 'hono'
-import { CONTENT_DEFAULTS } from '../src/lib/contentDefaults.ts'
+import { CONTENT_DEFAULTS } from '../src/lib/contentDefaults'
 import {
   createAuthSession,
   currentAccount,
   destroyAuthSession,
   type SessionAccount,
-} from './auth.ts'
-import { prisma } from './db.ts'
-import { hashPassword, randomPassword, verifyPassword } from './password.ts'
+} from './auth'
+import { prisma } from './db'
+import { hashPassword, randomPassword, verifyPassword } from './password'
 
 export const app = new Hono<{ Variables: { account: SessionAccount } }>()
 

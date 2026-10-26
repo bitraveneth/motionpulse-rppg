@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { prisma } from './db.ts'
+import { prisma } from './db'
 
 export const SESSION_COOKIE = 'mp_session'
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000

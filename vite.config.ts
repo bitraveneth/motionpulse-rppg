@@ -12,7 +12,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
-import { app as apiApp } from './server/app.ts'
+import { app as apiApp } from './server/app'
 
 const DEMO_CLIPS_DIR = resolve(process.cwd(), 'public/demo-clips')
 const DEMO_VIDEO_RE = /\.(mp4|webm|mov|m4v)$/i

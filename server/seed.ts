@@ -2,9 +2,9 @@
  * Seed: one admin (random password, printed once) + default site copy.
  * Re-running never overwrites admin edits to existing content keys.
  */
-import { CONTENT_DEFAULTS } from '../src/lib/contentDefaults.ts'
-import { prisma } from './db.ts'
-import { hashPassword, randomPassword } from './password.ts'
+import { CONTENT_DEFAULTS } from '../src/lib/contentDefaults'
+import { prisma } from './db'
+import { hashPassword, randomPassword } from './password'
 
 const email = (process.env.ADMIN_EMAIL ?? 'admin@motionpulse.local').toLowerCase()
 
