@@ -9,7 +9,8 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:api && tsc -b && vite build",
+    "build:api": "esbuild server/vercel-entry.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=api/index.js",
     "db:seed": "tsx server/seed.ts",
     "lint": "oxlint",
     "preview": "vite preview",
@@ -33,6 +34,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "^0.28.2",
     "oxlint": "^1.81.0",
     "prisma": "^6.19.3",
     "tailwindcss": "^4.3.3",
