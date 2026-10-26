@@ -650,7 +650,20 @@ app.get("/api/admin/export/users/:id", async (c) => {
 });
 
 // server/vercel-entry.ts
-var vercel_entry_default = handle(app);
+var handler = handle(app);
+var GET = handler;
+var HEAD = handler;
+var POST = handler;
+var PUT = handler;
+var PATCH = handler;
+var DELETE = handler;
+var OPTIONS = handler;
 export {
-  vercel_entry_default as default
+  DELETE,
+  GET,
+  HEAD,
+  OPTIONS,
+  PATCH,
+  POST,
+  PUT
 };

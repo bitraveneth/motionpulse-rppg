@@ -140,6 +140,7 @@ Passwords are hashed with Node `crypto.scrypt`; sign-in uses an httpOnly cookie 
 ### Deploy to Vercel (later)
 
 - Framework preset: **Vite** (build `npm run build`, output `dist`). `vercel.json` routes `/api/*` to the function and falls back to `index.html` for the SPA.
+- `api/index.js` is a self-contained esbuild bundle of the Hono app (`npm run build:api`, runs first in `npm run build`). Commit the regenerated bundle with server changes; Vercel rebuilds it on deploy.
 - Env vars to set in the Vercel dashboard: `DATABASE_URL` (pooled Prisma Postgres), `AUTH_SECRET` (random hex). `DIRECT_URL` only if migrations need the non-pooled host. No other secrets — do **not** put connection strings in the repo or README.
 - `postinstall` runs `prisma generate`; apply migrations from a machine that has the env (`npx prisma migrate deploy`).
 
