@@ -103,9 +103,9 @@ export function ScanPage() {
   const [searchParams] = useSearchParams()
   const c = useContent()
   const [controls, setControls] = useState<DemoControls>(DEFAULT_CONTROLS)
-  const [inputMode, setInputMode] = useState<InputMode>('synthetic')
+  const [inputMode, setInputMode] = useState<InputMode>('upload')
   const [status, setStatus] = useState(
-    'Sample ready — face preview below. Scrub the timeline, or upload several clips.',
+    'Choose Upload, Webcam, or Sample.',
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -115,8 +115,8 @@ export function ScanPage() {
   const [stageDetail, setStageDetail] = useState<string | undefined>()
   const [showStory, setShowStory] = useState(true)
   const [thumbnailData, setThumbnailData] = useState<string | null>(null)
-  const [scrub, setScrub] = useState(1)
-  const [durationSec, setDurationSec] = useState(12)
+  const [scrub, setScrub] = useState(0)
+  const [durationSec, setDurationSec] = useState(0)
   const [hasVideo, setHasVideo] = useState(false)
   const [sessionRuns, setSessionRuns] = useState<SessionRun[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -179,28 +179,28 @@ export function ScanPage() {
   const replaySavedRef = useRef<(post: PublicFeedPost) => Promise<void>>(
     async () => undefined,
   )
-  const autoReplayRef = useRef(false)
 
-  const synthetic = useMemo(
-    () =>
-      generateSyntheticSample({
-        durationSec: 12,
-        sampleRateHz: 30,
-        pulseBpm: controls.pulseBpm,
-        motionArtifactAmp: controls.motionArtifactAmp,
-        seed: 7,
-      }),
-    [controls.pulseBpm, controls.motionArtifactAmp],
-  )
+  const synthetic = useMemo(() => {
+    if (inputMode !== 'synthetic') return null
+    return generateSyntheticSample({
+      durationSec: 12,
+      sampleRateHz: 30,
+      pulseBpm: controls.pulseBpm,
+      motionArtifactAmp: controls.motionArtifactAmp,
+      seed: 7,
+    })
+  }, [inputMode, controls.pulseBpm, controls.motionArtifactAmp])
 
   const source: LiveBuffer | null =
-    inputMode === 'synthetic'
+    inputMode === 'synthetic' && synthetic
       ? {
           frames: synthetic.frames,
           roiRgb: synthetic.roiRgb,
           sampleRateHz: synthetic.sampleRateHz,
         }
-      : live
+      : inputMode === 'synthetic'
+        ? null
+        : live
 
   const result: PipelineResult | null = useMemo(() => {
     if (!source || source.frames.length < 16) return null
@@ -267,7 +267,7 @@ export function ScanPage() {
 
   // Keep synthetic duration in sync; paint a soft preview frame for the overlay.
   useEffect(() => {
-    if (inputMode !== 'synthetic') return
+    if (inputMode !== 'synthetic' || !synthetic) return
     setDurationSec(synthetic.frames.length / synthetic.sampleRateHz)
     setHasVideo(false)
     const canvas = canvasRef.current
@@ -292,31 +292,15 @@ export function ScanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMode])
 
-  // Seed the sample into the session once so multi-clip browse can include it.
-  useEffect(() => {
-    if (inputMode !== 'synthetic') return
-    if (sessionRunsRef.current.some((r) => r.source === 'sample')) return
-    ensureSampleInSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // Leaving the scan page ends the server-side scan session too.
   useEffect(() => () => resetScanSave(), [])
 
-  // A desktop without a camera can replay a feed clip that still has video.
   useEffect(() => {
-    const action = searchParams.get('action')
     let live = true
     listPublicFeed()
       .then((posts) => {
         if (!live) return
-        const clips = posts.filter((post) => post.hasVideo)
-        setSavedPosts(clips)
-        if (action || autoReplayRef.current) return
-        const first = clips[0]
-        if (!first) return
-        autoReplayRef.current = true
-        void replaySavedRef.current(first)
+        setSavedPosts(posts.filter((post) => post.hasVideo))
       })
       .catch(() => {
         if (live) setSavedPosts([])
@@ -324,7 +308,7 @@ export function ScanPage() {
     return () => {
       live = false
     }
-  }, [searchParams])
+  }, [])
 
   useEffect(() => {
     const video = videoRef.current
@@ -586,10 +570,17 @@ export function ScanPage() {
   }
 
   function ensureSampleInSession() {
+    const sample = generateSyntheticSample({
+      durationSec: 12,
+      sampleRateHz: 30,
+      pulseBpm: controlsRef.current.pulseBpm,
+      motionArtifactAmp: controlsRef.current.motionArtifactAmp,
+      seed: 7,
+    })
     const buffer = {
-      frames: synthetic.frames,
-      roiRgb: synthetic.roiRgb,
-      sampleRateHz: synthetic.sampleRateHz,
+      frames: sample.frames,
+      roiRgb: sample.roiRgb,
+      sampleRateHz: sample.sampleRateHz,
     }
     let pipeline: PipelineResult | null = null
     try {
@@ -698,11 +689,7 @@ export function ScanPage() {
       setHasVideo(false)
       setLiveEstimating(false)
       setDurationSec(12)
-      setLive({
-        frames: synthetic.frames,
-        roiRgb: synthetic.roiRgb,
-        sampleRateHz: synthetic.sampleRateHz,
-      })
+      setLive(null)
       ensureSampleInSession()
       setStatus(
         'Sample ready — scrub the timeline, or upload several clips and browse with the session slider.',
@@ -1213,8 +1200,8 @@ export function ScanPage() {
           ? e.message
           : 'Could not start the camera. Check browser permissions.',
       )
-      setStatus('Camera unavailable — try the sample or upload a video instead.')
-      setInputMode('synthetic')
+      setStatus('Camera unavailable — use Upload or Sample instead.')
+      setInputMode('upload')
     }
   }
 

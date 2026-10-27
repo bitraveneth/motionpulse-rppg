@@ -12,7 +12,7 @@ export function SavedScanBar({ posts, activeId, busy, onPlay }: Props) {
   if (posts.length === 0) {
     return (
       <p className="saved-scan-empty">
-        No saved face videos yet. The sample below still shows the four spots.
+        No saved face videos yet.
       </p>
     )
   }
