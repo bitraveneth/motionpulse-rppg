@@ -735,10 +735,160 @@
 
   @media (min-width: 900px) {
     .home-hero-inner {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 2rem;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.15fr);
+      gap: 2.5rem;
       align-items: center;
     }
+  }
+
+  .home-hero-slider {
+    min-width: 0;
+  }
+
+  .home-hero-slide {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .home-hero-caption {
+    min-width: 0;
+  }
+
+  .home-hero-kicker {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #0f9f8f;
+  }
+
+  .home-hero-slide-title {
+    margin: 0.2rem 0 0;
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+
+  .home-hero-slide-body {
+    margin: 0.35rem 0 0;
+    color: var(--site-ink-soft);
+    line-height: 1.45;
+    max-width: 36rem;
+  }
+
+  .home-hero-slider-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+
+  .hero-dots {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .hero-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px;
+    border: 0;
+    background: rgba(15, 159, 143, 0.28);
+    cursor: pointer;
+  }
+
+  .hero-dot.is-active {
+    width: 1.4rem;
+    background: #0f9f8f;
+  }
+
+  .hero-arrow {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 999px;
+    border: 1px solid var(--site-line);
+    background: #fff;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--site-ink);
+  }
+
+  .hero-demo-card {
+    aspect-ratio: 4 / 5;
+    max-height: min(72vh, 560px);
+    border-radius: 1.1rem;
+    padding: 1.4rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.55rem;
+    color: #f4fffd;
+    background:
+      radial-gradient(ellipse 70% 50% at 80% 0%, rgba(125, 211, 252, 0.35), transparent 55%),
+      linear-gradient(165deg, #12343a 0%, #0c242c 55%, #102a32 100%);
+    box-shadow: 0 24px 50px -32px rgba(12, 36, 44, 0.7);
+  }
+
+  .hero-demo-kicker {
+    margin: 0;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: rgba(186, 230, 253, 0.8);
+  }
+
+  .hero-demo-value {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(3rem, 6vw, 4.4rem);
+    line-height: 0.95;
+    font-weight: 650;
+  }
+
+  .hero-demo-value span {
+    margin-left: 0.35rem;
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+    color: rgba(186, 230, 253, 0.75);
+  }
+
+  .hero-demo-word {
+    font-size: clamp(2.2rem, 5vw, 3.2rem);
+  }
+
+  .hero-mini-wave {
+    width: 100%;
+    height: auto;
+  }
+
+  .hero-demo-chip {
+    margin: 0;
+    align-self: flex-start;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    font-size: 0.78rem;
+  }
+
+  .hero-demo-dots {
+    display: flex;
+    gap: 0.55rem;
+    margin: 0.4rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .hero-demo-dots li {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 999px;
+    background: rgba(186, 230, 253, 0.85);
+    box-shadow: 0 0 0 6px rgba(186, 230, 253, 0.15);
   }
 
   .home-hero-copy {
@@ -1109,24 +1259,115 @@
 
   @media (min-width: 960px) {
     .scan-desktop-board {
-      grid-template-columns: minmax(11rem, 14rem) minmax(0, 26.5rem);
+      grid-template-columns: minmax(0, 28rem) minmax(16rem, 22rem);
       justify-content: center;
-      gap: 1.35rem;
+      align-items: start;
+      gap: 1.25rem;
     }
 
     .desktop-pulse-rail {
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      gap: 0.55rem;
+      gap: 0.75rem;
       min-width: 0;
-      padding: 1.1rem 1rem;
-      border-radius: 1.2rem;
-      border: 1px solid rgba(125, 211, 252, 0.28);
-      background:
-        radial-gradient(ellipse 80% 50% at 20% 0%, rgba(125, 211, 252, 0.18), transparent 55%),
-        linear-gradient(180deg, #102031 0%, #0b1724 100%);
-      color: #e8f6ff;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .premium-card {
+      padding: 0.9rem 0.95rem 1rem;
+      border-radius: 1rem;
+      background: #fff;
+      border: 1px solid rgba(20, 40, 48, 0.08);
+      box-shadow: 0 16px 40px -28px rgba(16, 40, 48, 0.55);
+    }
+
+    .premium-card-head {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .premium-icon {
+      width: 2.4rem;
+      height: 2.4rem;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: #e7f7f4;
+      color: #0f9f8f;
+      font-size: 1.05rem;
+      flex: 0 0 auto;
+    }
+
+    .premium-icon-breath {
+      background: #e7f3f8;
+      color: #1a7f9a;
+    }
+
+    .premium-icon-wave {
+      background: #eef6f3;
+      color: #14968a;
+    }
+
+    .premium-kicker {
+      margin: 0;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #6d7c82;
+    }
+
+    .premium-value {
+      margin: 0.1rem 0 0;
+      font-family: var(--font-display);
+      font-size: 2rem;
+      line-height: 1;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .premium-value span {
+      margin-left: 0.3rem;
+      font-size: 0.78rem;
+      font-weight: 650;
+      color: #6d7c82;
+    }
+
+    .premium-value.is-live {
+      color: #0f9f8f;
+    }
+
+    .premium-spark {
+      margin-top: 0.45rem;
+    }
+
+    .premium-spark-tall {
+      margin-top: 0.35rem;
+    }
+
+    .premium-status,
+    .premium-note,
+    .premium-empty {
+      margin: 0.4rem 0 0;
+      font-size: 0.78rem;
+      color: #5f7278;
+    }
+
+    .premium-status {
+      display: inline-flex;
+      padding: 0.18rem 0.5rem;
+      border-radius: 999px;
+      background: #e7f7f4;
+      color: #0c6e64;
+      font-weight: 700;
+    }
+
+    .premium-status-inline {
+      margin-top: 0.25rem;
     }
 
     .desktop-pulse-label {
