@@ -12,6 +12,7 @@ import {
 import { ShareToFeed } from '../components/ShareToFeed'
 import { SignalChart, SpectrumChart } from '../components/SignalChart'
 import { RegionTrustLines } from '../components/RegionTrustLines'
+import { DesktopPulseRail } from '../components/DesktopPulseRail'
 import { PhoneVitals } from '../components/PhoneVitals'
 import { SavedScanBar } from '../components/SavedScanBar'
 import { VitalsScanRow } from '../components/VitalsScanRow'
@@ -1695,68 +1696,79 @@ export function ScanPage() {
           />
 
           <div className="scan-session-frame product-frame">
-            <div className="phone-scan">
-              <div className="scan-session-monitor-wrap">
-                <MonitorStage
-                  videoRef={videoRef}
-                  canvasRef={canvasRef}
-                  landmarks={lastLandmarks}
-                  inputMode={inputMode}
-                  busy={busy || capturing}
-                  hasVideo={hasVideo}
-                  scrub={scrub}
-                  onScrub={handleScrub}
-                  durationSec={durationSec}
-                  onUploadClick={openUploadPicker}
-                  onWebcam={requestWebcam}
-                  onSample={() => void handleInputMode('synthetic')}
-                  onLoadDemoSet={() => void loadDemoSet()}
-                  demoLoading={demoLoading}
-                  status={status}
-                  showCtaBar={false}
-                  captureLeft={captureLeft}
-                  hatPrompt={hatPrompt}
-                  hatReason={hatReason}
-                  onHatClear={recheckHat}
-                  onHatSkip={skipHatCheck}
-                  spots={faceSpots}
-                  progress={scanProgress}
-                  onStop={capturing && captureLeft != null ? requestStopCapture : null}
-                />
-              </div>
-              <PhoneVitals
+            <div className="scan-desktop-board">
+              <DesktopPulseRail
                 result={result}
                 respiratory={respiratory}
+                scrub={scrub}
                 liveEstimating={
                   liveEstimating ||
                   (busy && stage === 'estimating_pulse' && Boolean(result))
                 }
               />
-              <div className="phone-scan-actions" role="group" aria-label="Choose a video source">
-                <button
-                  type="button"
-                  className="cta cta-secondary"
-                  onClick={openUploadPicker}
-                  disabled={busy || capturing}
-                >
-                  Upload
-                </button>
-                <button
-                  type="button"
-                  className="cta cta-secondary"
-                  onClick={requestWebcam}
-                  disabled={busy || capturing}
-                >
-                  Webcam
-                </button>
-                <button
-                  type="button"
-                  className="cta cta-secondary"
-                  onClick={() => void handleInputMode('synthetic')}
-                  disabled={busy || capturing}
-                >
-                  Sample
-                </button>
+              <div className="phone-scan">
+                <div className="scan-session-monitor-wrap">
+                  <MonitorStage
+                    videoRef={videoRef}
+                    canvasRef={canvasRef}
+                    landmarks={lastLandmarks}
+                    inputMode={inputMode}
+                    busy={busy || capturing}
+                    hasVideo={hasVideo}
+                    scrub={scrub}
+                    onScrub={handleScrub}
+                    durationSec={durationSec}
+                    onUploadClick={openUploadPicker}
+                    onWebcam={requestWebcam}
+                    onSample={() => void handleInputMode('synthetic')}
+                    onLoadDemoSet={() => void loadDemoSet()}
+                    demoLoading={demoLoading}
+                    status={status}
+                    showCtaBar={false}
+                    captureLeft={captureLeft}
+                    hatPrompt={hatPrompt}
+                    hatReason={hatReason}
+                    onHatClear={recheckHat}
+                    onHatSkip={skipHatCheck}
+                    spots={faceSpots}
+                    progress={scanProgress}
+                    onStop={capturing && captureLeft != null ? requestStopCapture : null}
+                  />
+                </div>
+                <PhoneVitals
+                  result={result}
+                  respiratory={respiratory}
+                  liveEstimating={
+                    liveEstimating ||
+                    (busy && stage === 'estimating_pulse' && Boolean(result))
+                  }
+                />
+                <div className="phone-scan-actions" role="group" aria-label="Choose a video source">
+                  <button
+                    type="button"
+                    className="cta cta-secondary"
+                    onClick={openUploadPicker}
+                    disabled={busy || capturing}
+                  >
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    className="cta cta-secondary"
+                    onClick={requestWebcam}
+                    disabled={busy || capturing}
+                  >
+                    Webcam
+                  </button>
+                  <button
+                    type="button"
+                    className="cta cta-secondary"
+                    onClick={() => void handleInputMode('synthetic')}
+                    disabled={busy || capturing}
+                  >
+                    Sample
+                  </button>
+                </div>
               </div>
             </div>
 

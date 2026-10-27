@@ -1087,6 +1087,16 @@
     max-height: min(52vh, 480px);
   }
 
+  .scan-desktop-board {
+    display: grid;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .desktop-pulse-rail {
+    display: none;
+  }
+
   .phone-scan {
     width: min(100%, 26.5rem);
     margin-inline: auto;
@@ -1095,6 +1105,101 @@
     border-radius: 1.35rem;
     overflow: hidden;
     box-shadow: 0 18px 40px -28px rgba(12, 34, 51, 0.5);
+  }
+
+  @media (min-width: 960px) {
+    .scan-desktop-board {
+      grid-template-columns: minmax(11rem, 14rem) minmax(0, 26.5rem);
+      justify-content: center;
+      gap: 1.35rem;
+    }
+
+    .desktop-pulse-rail {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.55rem;
+      min-width: 0;
+      padding: 1.1rem 1rem;
+      border-radius: 1.2rem;
+      border: 1px solid rgba(125, 211, 252, 0.28);
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 0%, rgba(125, 211, 252, 0.18), transparent 55%),
+        linear-gradient(180deg, #102031 0%, #0b1724 100%);
+      color: #e8f6ff;
+    }
+
+    .desktop-pulse-label {
+      margin: 0;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(186, 230, 253, 0.78);
+    }
+
+    .desktop-pulse-bpm {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 4vw, 3.2rem);
+      font-weight: 650;
+      line-height: 0.95;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .desktop-pulse-bpm span {
+      margin-left: 0.35rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: rgba(186, 230, 253, 0.7);
+    }
+
+    .desktop-pulse-bpm.is-live {
+      color: #7dd3fc;
+    }
+
+    .desktop-pulse-wave {
+      margin-top: 0.35rem;
+      border-radius: 0.7rem;
+      overflow: hidden;
+      background: rgba(8, 18, 28, 0.45);
+    }
+
+    .desktop-pulse-empty {
+      margin: 0.2rem 0 0;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      color: rgba(186, 230, 253, 0.62);
+    }
+
+    .desktop-pulse-meta {
+      display: grid;
+      gap: 0.45rem;
+      margin: 0.55rem 0 0;
+    }
+
+    .desktop-pulse-meta div {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    .desktop-pulse-meta dt {
+      color: rgba(186, 230, 253, 0.62);
+    }
+
+    .desktop-pulse-meta dd {
+      margin: 0;
+      font-variant-numeric: tabular-nums;
+      color: #f0f9ff;
+    }
+
+    .phone-scan .phone-vitals {
+      /* Desktop already shows pulse on the left rail. */
+      display: none;
+    }
   }
 
   .scan-session-frame.product-frame .phone-scan .monitor-frame {

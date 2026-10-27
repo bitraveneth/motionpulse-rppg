@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { faceBoxFromLandmarks } from '../lib/rppg/faceBox'
+import { FACE_MESH_EDGES, FACE_MESH_NODES } from '../lib/rppg/faceMesh'
 import {
   landmarkCentroid,
   spotHeat,
-  strongestSpot,
   type SpotGlow,
 } from '../lib/rppg/faceSpots'
 import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
@@ -79,11 +79,11 @@ export function MonitorStage({
     hasVideo && (inputMode === 'webcam' || inputMode === 'upload')
 
   useEffect(() => {
-    if (!spots || !ROI_IDS.some((id) => spotHeat(spots[id]) > 0.08)) return
+    if (!landmarks) return
     let raf = 0
     let last = 0
     const loop = (now: number) => {
-      if (now - last > 70) {
+      if (now - last > 90) {
         last = now
         setGlowTick(now)
       }
@@ -91,7 +91,7 @@ export function MonitorStage({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [spots])
+  }, [landmarks])
 
   useEffect(() => {
     const canvas = overlayRef.current
@@ -145,33 +145,6 @@ export function MonitorStage({
       })
       return
     }
-
-    const x = ox + box.x * ow
-    const y = oy + box.y * oh
-    const bw = box.w * ow
-    const bh = box.h * oh
-    const corner = Math.min(22, bw * 0.12, bh * 0.12)
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(x, y, bw, bh)
-
-    ctx.strokeStyle = '#2EC4B6'
-    ctx.lineWidth = 3.5
-    ctx.beginPath()
-    ctx.moveTo(x, y + corner)
-    ctx.lineTo(x, y)
-    ctx.lineTo(x + corner, y)
-    ctx.moveTo(x + bw - corner, y)
-    ctx.lineTo(x + bw, y)
-    ctx.lineTo(x + bw, y + corner)
-    ctx.moveTo(x, y + bh - corner)
-    ctx.lineTo(x, y + bh)
-    ctx.lineTo(x + corner, y + bh)
-    ctx.moveTo(x + bw - corner, y + bh)
-    ctx.lineTo(x + bw, y + bh)
-    ctx.lineTo(x + bw, y + bh - corner)
-    ctx.stroke()
 
     drawFaceMarks(ctx, {
       landmarks,
@@ -345,6 +318,19 @@ function fittedFrame(
   return { ox: (frameW - ow) / 2, oy: (frameH - oh) / 2, ow, oh }
 }
 
+function meshPoint(
+  landmarks: FrameLandmarks,
+  index: number,
+  ox: number,
+  oy: number,
+  ow: number,
+  oh: number,
+): { x: number; y: number } | null {
+  const point = landmarks[index]
+  if (!point) return null
+  return { x: ox + point.x * ow, y: oy + point.y * oh }
+}
+
 function drawFaceMarks(
   ctx: CanvasRenderingContext2D,
   input: {
@@ -360,39 +346,42 @@ function drawFaceMarks(
   const { landmarks, ox, oy, ow, oh, spots, now } = input
   if (!landmarks || landmarks.length === 0) return
 
+  const breath = 0.55 + 0.45 * Math.sin(now / 420)
   ctx.save()
-  for (let i = 0; i < landmarks.length; i += 6) {
-    const point = landmarks[i]
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = `rgba(186, 230, 253, ${0.42 + breath * 0.18})`
+  ctx.lineWidth = 1.15
+  ctx.beginPath()
+  for (const [a, b] of FACE_MESH_EDGES) {
+    const p0 = meshPoint(landmarks, a, ox, oy, ow, oh)
+    const p1 = meshPoint(landmarks, b, ox, oy, ow, oh)
+    if (!p0 || !p1) continue
+    ctx.moveTo(p0.x, p0.y)
+    ctx.lineTo(p1.x, p1.y)
+  }
+  ctx.stroke()
+
+  for (const index of FACE_MESH_NODES) {
+    const point = meshPoint(landmarks, index, ox, oy, ow, oh)
     if (!point) continue
     ctx.beginPath()
-    ctx.arc(ox + point.x * ow, oy + point.y * oh, 1.15, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,255,255,0.55)'
+    ctx.arc(point.x, point.y, 1.7, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(236, 249, 255, ${0.72 + breath * 0.2})`
     ctx.fill()
   }
 
-  const lead = spots ? strongestSpot(spots) : null
-  const pulse = 0.5 + 0.5 * Math.sin(now / 280)
+  // Soft ROI accents only — no large red/white blobs.
   for (const id of ROI_IDS) {
     const center = landmarkCentroid(landmarks, ROI_LANDMARK_INDICES[id])
     if (!center) continue
     const heat = spots ? spotHeat(spots[id]) : 0
-    const emphasized = id === lead && heat > 0.05
-    const radius = (emphasized ? 8 : 6) + heat * (4 + pulse * 2)
+    if (heat < 0.12) continue
     const cx = ox + center.x * ow
     const cy = oy + center.y * oh
     ctx.beginPath()
-    ctx.arc(cx, cy, radius + 7, 0, Math.PI * 2)
-    ctx.fillStyle =
-      heat > 0.08
-        ? `rgba(226, 54, 72, ${0.16 + heat * 0.34})`
-        : 'rgba(255,255,255,0.16)'
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2)
-    ctx.fillStyle =
-      heat > 0.08
-        ? `rgba(226, 54, 72, ${0.55 + heat * 0.45})`
-        : 'rgba(255,255,255,0.92)'
+    ctx.arc(cx, cy, 3.2 + heat * 1.4, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(125, 211, 252, ${0.35 + heat * 0.4})`
     ctx.fill()
   }
   ctx.restore()
