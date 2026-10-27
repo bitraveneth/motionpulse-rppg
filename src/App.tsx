@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AccountPage } from './pages/AccountPage'
 import { FeedPage } from './pages/FeedPage'
+import { GlossaryPage } from './pages/GlossaryPage'
 import { HomePage } from './pages/HomePage'
 import { ScanPage } from './pages/ScanPage'
 import { SignInPage } from './pages/SignInPage'
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/" element={<HomeOrFeed />} />
           <Route path="/feed" element={<FeedPage />} />
           <Route path="/scan" element={<ScanPage />} />
+          <Route path="/glossary" element={<GlossaryPage />} />
           <Route path="/signin" element={<SignInPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/admin/*" element={<AdminApp />} />

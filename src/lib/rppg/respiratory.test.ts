@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   breathScaleNote,
+  breathsFromPeakSpacing,
   estimateRespiratoryRate,
   estimateShownBreath,
 } from './respiratory'
@@ -64,6 +65,21 @@ describe('estimateRespiratoryRate', () => {
   it('returns null for flat / near-zero signal', () => {
     const s = Array.from({ length: 360 }, () => 0.001)
     expect(estimateRespiratoryRate(s, 30, { minSnr: 2 })).toBeNull()
+  })
+})
+
+describe('breathsFromPeakSpacing', () => {
+  it('scales two breaths four seconds apart to 15 per minute', () => {
+    const sampleRateHz = 12
+    const n = sampleRateHz * 10
+    const series = Array.from({ length: n }, (_, i) => {
+      const t = i / sampleRateHz
+      return Math.exp(-(((t % 4) - 0.4) ** 2) / 0.08)
+    })
+    const est = breathsFromPeakSpacing(series, sampleRateHz)
+    expect(est).not.toBeNull()
+    expect(est!.breathsPerMin).toBeGreaterThan(12)
+    expect(est!.breathsPerMin).toBeLessThan(18)
   })
 })
 

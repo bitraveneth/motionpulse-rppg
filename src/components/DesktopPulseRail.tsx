@@ -1,56 +1,57 @@
-import { conflictRiskLabel } from '../lib/rppg/conflict'
+import type { BeatReading, HrvReading } from '../lib/rppg/beatIntervals'
 import type { PipelineResult } from '../lib/rppg/pipeline'
 import type { RespiratoryEstimate } from '../lib/rppg/respiratory'
-import { reliabilityFromConflict } from '../lib/feed/reliability'
 import { SignalChart } from './SignalChart'
 
 type Props = {
   result: PipelineResult | null
+  heartBpm: number | null
+  beats: BeatReading | null
+  hrv: HrvReading | null
   respiratory: RespiratoryEstimate | null
   scrub: number
   liveEstimating?: boolean
 }
 
-/** Desktop: stacked pulse, breath, and waveform cards beside the face. */
+/** One quiet vitals section beside the camera. */
 export function DesktopPulseRail({
   result,
+  heartBpm,
+  beats,
+  hrv,
   respiratory,
   scrub,
   liveEstimating = false,
 }: Props) {
-  const remark = result
-    ? reliabilityFromConflict(result.conflict.combined)
-    : null
-  const motion = result ? conflictRiskLabel(result.conflict.combined) : null
   const pulseWave =
     result && result.suppression.gated.length > 8
       ? result.suppression.gated
       : result?.candidate
   const breathNote = respiratory
-    ? remark?.badge ?? 'Estimate'
-    : 'Not clear in this clip'
+    ? `${respiratory.breathsInClip.toFixed(1)} in ${Math.round(respiratory.durationSec)}s`
+    : 'Waiting for a clear spacing'
+  const heartNote =
+    beats && heartBpm != null && Math.abs(beats.perMinute - heartBpm) < 0.6
+      ? `${beats.beats} beats in ${beats.seconds.toFixed(0)}s`
+      : 'From the pulse wave'
 
   return (
-    <aside className="desktop-pulse-rail" aria-label="Pulse and breath">
+    <aside className="desktop-pulse-rail" aria-label="Vitals">
       <section className="pulse-section">
+        <p className="pulse-section-title">Vitals</p>
+
         <article className="pulse-row pulse-row-heart">
-          <span className="premium-icon" aria-hidden>
-            ♥
-          </span>
           <div className="pulse-row-copy">
             <p className="premium-kicker">Heart rate</p>
             <p className={`premium-value ${liveEstimating ? 'is-live' : ''}`}>
-              {result ? result.gatedBpm.toFixed(0) : '—'}
+              {heartBpm != null ? heartBpm.toFixed(0) : '—'}
               <span>bpm</span>
             </p>
           </div>
-          <p className="premium-status">{remark ? remark.badge : 'Pending'}</p>
+          <p className="premium-note">{heartNote}</p>
         </article>
 
         <article className="pulse-row pulse-row-breath">
-          <span className="premium-icon premium-icon-breath" aria-hidden>
-            ≈
-          </span>
           <div className="pulse-row-copy">
             <p className="premium-kicker">Respiratory rate</p>
             <p className="premium-value">
@@ -61,19 +62,29 @@ export function DesktopPulseRail({
           <p className="premium-note">{breathNote}</p>
         </article>
 
+        <article className="pulse-row pulse-row-hrv">
+          <div className="pulse-row-copy">
+            <p className="premium-kicker">HRV</p>
+            <p className="premium-value">
+              {hrv ? hrv.rmssdMs.toFixed(0) : '—'}
+              <span>ms</span>
+            </p>
+          </div>
+          <p className="premium-note">
+            {hrv ? 'Short reading' : 'Needs 8 beats'}
+          </p>
+        </article>
+
         <article className="pulse-row pulse-row-graph">
-          <header className="pulse-graph-head">
-            <p className="premium-kicker">Pulse graph</p>
-            <p className="premium-note">{motion ? motion.label : 'Motion overlap'}</p>
-          </header>
+          <p className="premium-kicker">Pulse</p>
           {pulseWave && pulseWave.length > 8 ? (
             <SignalChart
-              height={72}
+              height={64}
               cursorFraction={scrub}
-              series={[{ values: pulseWave, color: '#6b4de0' }]}
+              series={[{ values: pulseWave, color: '#1a7f72' }]}
             />
           ) : (
-            <p className="premium-empty">Waiting for a face</p>
+            <p className="premium-empty">The trace appears as the face is read.</p>
           )}
         </article>
       </section>

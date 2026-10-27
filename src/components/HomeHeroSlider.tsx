@@ -6,7 +6,7 @@ type Slide = {
   kicker: string
   title: string
   body: string
-  kind: 'face' | 'pulse' | 'breath' | 'trust'
+  kind: 'face' | 'pulse' | 'breath' | 'hrv'
 }
 
 const SLIDES: Slide[] = [
@@ -32,11 +32,11 @@ const SLIDES: Slide[] = [
     kind: 'breath',
   },
   {
-    id: 'trust',
-    kicker: 'Signal trust',
-    title: 'Motion tells you when to doubt the number',
-    body: 'Stable, Mixed, or Unreliable comes from how much face movement lines up with the pulse. It is a quality flag, not a health grade.',
-    kind: 'trust',
+    id: 'hrv',
+    kicker: 'HRV',
+    title: 'A short reading from the gaps between beats',
+    body: 'When a 10 second clip holds at least 8 beats, the scan shows how much those gaps vary. It is a short reading, scaled from the same pulse.',
+    kind: 'hrv',
   },
 ]
 
@@ -60,7 +60,7 @@ function SlideArt({ kind }: { kind: Slide['kind'] }) {
           72<span>bpm</span>
         </p>
         <MiniWave color="#0f9f8f" />
-        <p className="hero-demo-chip">Example · Stable</p>
+        <p className="hero-demo-chip">Example</p>
       </div>
     )
   }
@@ -78,9 +78,11 @@ function SlideArt({ kind }: { kind: Slide['kind'] }) {
   }
   return (
     <div className="hero-demo-card">
-      <p className="hero-demo-kicker">Signal</p>
-      <p className="hero-demo-value hero-demo-word">Stable</p>
-      <p className="hero-demo-chip">Low motion overlap</p>
+      <p className="hero-demo-kicker">HRV</p>
+      <p className="hero-demo-value">
+        28<span>ms</span>
+      </p>
+      <p className="hero-demo-chip">Example · short reading</p>
       <ul className="hero-demo-dots" aria-hidden>
         <li />
         <li />
@@ -91,7 +93,7 @@ function SlideArt({ kind }: { kind: Slide['kind'] }) {
   )
 }
 
-/** Large home hero: face ROI, then pulse, breath, and trust. */
+/** Large home hero: face, heart rate, breath, and a short HRV reading. */
 export function HomeHeroSlider() {
   const [index, setIndex] = useState(0)
   const slide = SLIDES[index]!

@@ -40,6 +40,11 @@ import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
 import { runPipeline, type PipelineResult } from '../lib/rppg/pipeline'
 import { conflictRiskLabel } from '../lib/rppg/conflict'
 import { estimateShownBreath, faceGreenSeries } from '../lib/rppg/respiratory'
+import {
+  heartRateFromPeaks,
+  hrvFromBeats,
+  shownHeartRate,
+} from '../lib/rppg/beatIntervals'
 import { generateSyntheticSample } from '../lib/rppg/synthetic'
 import { paintSyntheticPreview } from '../lib/rppg/syntheticPreview'
 import {
@@ -226,6 +231,21 @@ export function ScanPage() {
       source.roiRgb,
     )
   }, [result, source])
+
+  const beats = useMemo(() => {
+    if (!result || !source) return null
+    const series =
+      result.suppression.gated.length > 24
+        ? result.suppression.gated
+        : result.candidate
+    return heartRateFromPeaks(series, source.sampleRateHz)
+  }, [result, source])
+
+  const heartBpm = shownHeartRate(result?.gatedBpm, beats)
+  const hrv = useMemo(
+    () => (beats ? hrvFromBeats(beats, result?.gatedBpm) : null),
+    [beats, result],
+  )
 
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
 
@@ -1664,14 +1684,14 @@ export function ScanPage() {
       <SiteNav primaryCta={{ label: c('cta.scan'), to: '/scan' }} />
 
       <main className="scan-page" id="monitor">
-        <header className="scan-page-head">
-          <h1>Scan session</h1>
-          <p>
-            Webcam records for 10 seconds, then stops and shows the result.
-            That reading is saved with the time. Post it if you want the face
-            video on the public feed.
-          </p>
-        </header>
+        <section className="scan-studio">
+          <header className="scan-studio-head">
+            <p className="scan-kicker">Face video</p>
+            <h1>Scan</h1>
+            <p className="scan-lede">
+              Ten seconds of a face, scaled to a one minute rate.
+            </p>
+          </header>
 
         <input
           ref={fileInputRef}
@@ -1689,7 +1709,19 @@ export function ScanPage() {
         {error ? (
           <div className="scan-alerts error-banner" role="alert">{error}</div>
         ) : null}
-        <AnalysisProgress stage={stage} detail={stageDetail} />
+        <AnalysisProgress
+          stage={stage}
+          detail={stageDetail}
+          fraction={
+            stage === 'estimating_pulse'
+              ? analyzePct
+              : stage === 'finding_face'
+                ? 0.4
+                : stage === 'optimizing'
+                  ? 0.16
+                  : null
+          }
+        />
         {queueLeft > 0 ? (
           <p className="scan-alerts queue-banner" role="status">
             {queueLeft} clip{queueLeft === 1 ? '' : 's'} left in the session queue…
@@ -1697,7 +1729,7 @@ export function ScanPage() {
         ) : null}
 
         <div className="scan-stage">
-          {!result ? (
+          {vitalsEmptyHint && (stage === 'idle' || stage === 'done') ? (
             <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
           ) : null}
 
@@ -1712,6 +1744,9 @@ export function ScanPage() {
             <div className="scan-desktop-board">
               <DesktopPulseRail
                 result={result}
+                heartBpm={heartBpm}
+                beats={beats}
+                hrv={hrv}
                 respiratory={respiratory}
                 scrub={scrub}
                 liveEstimating={
@@ -1755,7 +1790,8 @@ export function ScanPage() {
                   />
                 </div>
                 <PhoneVitals
-                  result={result}
+                  heartBpm={heartBpm}
+                  hrv={hrv}
                   respiratory={respiratory}
                   liveEstimating={
                     liveEstimating ||
@@ -2091,6 +2127,7 @@ export function ScanPage() {
             </div>
           </details>
         </div>
+        </section>
       </main>
 
       <footer className="site-foot">

@@ -30,6 +30,7 @@ export const CONTENT_DEFAULTS: Record<string, string> = {
   'site.maintenance_note': '',
   'nav.feed': 'Feed',
   'nav.scan': 'Scan',
+  'nav.glossary': 'Glossary',
   'nav.how': 'How it works',
   'nav.demo': 'Demo',
   'nav.lab': 'Local lab',

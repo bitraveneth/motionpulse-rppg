@@ -1,36 +1,26 @@
-import { conflictRiskLabel } from '../lib/rppg/conflict'
-import type { PipelineResult } from '../lib/rppg/pipeline'
+import type { HrvReading } from '../lib/rppg/beatIntervals'
 import type { RespiratoryEstimate } from '../lib/rppg/respiratory'
-import { reliabilityFromConflict } from '../lib/feed/reliability'
 
 type Props = {
-  result: PipelineResult | null
+  heartBpm: number | null
+  hrv: HrvReading | null
   respiratory: RespiratoryEstimate | null
   liveEstimating?: boolean
 }
 
-/** Four tiles this app can actually fill: pulse, breath, signal, motion. */
+/** Readings under the camera on a narrow screen. */
 export function PhoneVitals({
-  result,
+  heartBpm,
+  hrv,
   respiratory,
   liveEstimating = false,
 }: Props) {
-  const remark = result
-    ? reliabilityFromConflict(result.conflict.combined)
-    : null
-  const motionPct = result
-    ? Math.round(result.conflict.combined * 100)
-    : null
-  const motionLabel = result
-    ? conflictRiskLabel(result.conflict.combined).label
-    : null
-
   return (
     <div className="phone-vitals" role="list" aria-label="Scan readings">
       <article className="phone-vital" role="listitem">
-        <span className="phone-vital-label">Pulse</span>
+        <span className="phone-vital-label">Heart rate</span>
         <span className={`phone-vital-value ${liveEstimating ? 'is-live' : ''}`}>
-          {result ? result.gatedBpm.toFixed(0) : '—'}
+          {heartBpm != null ? heartBpm.toFixed(0) : '—'}
         </span>
         <span className="phone-vital-unit">bpm</span>
       </article>
@@ -42,20 +32,11 @@ export function PhoneVitals({
         <span className="phone-vital-unit">/min</span>
       </article>
       <article className="phone-vital" role="listitem">
-        <span className="phone-vital-label">Signal</span>
-        <span className="phone-vital-value phone-vital-value-word">
-          {remark ? remark.badge : '—'}
-        </span>
-        <span className="phone-vital-unit">trust</span>
-      </article>
-      <article className="phone-vital" role="listitem">
-        <span className="phone-vital-label">Motion</span>
+        <span className="phone-vital-label">HRV</span>
         <span className="phone-vital-value">
-          {motionPct != null ? motionPct : '—'}
+          {hrv ? hrv.rmssdMs.toFixed(0) : '—'}
         </span>
-        <span className="phone-vital-unit">
-          {motionLabel ? `${motionLabel.toLowerCase()} overlap` : 'overlap'}
-        </span>
+        <span className="phone-vital-unit">{hrv ? 'ms · short' : 'ms'}</span>
       </article>
     </div>
   )
