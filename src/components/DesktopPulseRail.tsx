@@ -32,75 +32,51 @@ export function DesktopPulseRail({
 
   return (
     <aside className="desktop-pulse-rail" aria-label="Pulse and breath">
-      <article className="premium-card premium-card-pulse">
-        <header className="premium-card-head">
+      <section className="pulse-section">
+        <article className="pulse-row pulse-row-heart">
           <span className="premium-icon" aria-hidden>
             ♥
           </span>
-          <div>
+          <div className="pulse-row-copy">
             <p className="premium-kicker">Heart rate</p>
             <p className={`premium-value ${liveEstimating ? 'is-live' : ''}`}>
               {result ? result.gatedBpm.toFixed(0) : '—'}
               <span>bpm</span>
             </p>
           </div>
-        </header>
-        <div className="premium-spark">
-          {pulseWave && pulseWave.length > 8 ? (
-            <SignalChart
-              height={56}
-              cursorFraction={scrub}
-              cursorColor="rgba(255,255,255,0.75)"
-              series={[{ values: pulseWave, color: '#ffffff' }]}
-            />
-          ) : (
-            <p className="premium-empty">Waiting for a face</p>
-          )}
-        </div>
-        <p className="premium-status">{remark ? remark.badge : 'Signal pending'}</p>
-      </article>
+          <p className="premium-status">{remark ? remark.badge : 'Pending'}</p>
+        </article>
 
-      <article className="premium-card premium-card-breath">
-        <header className="premium-card-head">
+        <article className="pulse-row pulse-row-breath">
           <span className="premium-icon premium-icon-breath" aria-hidden>
             ≈
           </span>
-          <div>
+          <div className="pulse-row-copy">
             <p className="premium-kicker">Respiratory rate</p>
             <p className="premium-value">
               {respiratory ? respiratory.breathsPerMin.toFixed(0) : '—'}
               <span>/min</span>
             </p>
           </div>
-        </header>
-        <p className="premium-note">{breathNote}</p>
-      </article>
+          <p className="premium-note">{breathNote}</p>
+        </article>
 
-      <article className="premium-card premium-card-graph">
-        <header className="premium-card-head">
-          <span className="premium-icon premium-icon-wave" aria-hidden>
-            ～
-          </span>
-          <div>
+        <article className="pulse-row pulse-row-graph">
+          <header className="pulse-graph-head">
             <p className="premium-kicker">Pulse graph</p>
-            <p className="premium-status premium-status-inline">
-              {motion ? motion.label : 'Motion overlap'}
-            </p>
-          </div>
-        </header>
-        <div className="premium-spark premium-spark-tall">
+            <p className="premium-note">{motion ? motion.label : 'Motion overlap'}</p>
+          </header>
           {pulseWave && pulseWave.length > 8 ? (
             <SignalChart
-              height={96}
+              height={72}
               cursorFraction={scrub}
-              cursorColor="rgba(255,255,255,0.75)"
-              series={[{ values: pulseWave, color: '#ffffff' }]}
+              series={[{ values: pulseWave, color: '#6b4de0' }]}
             />
           ) : (
-            <p className="premium-empty">The trace fills in as frames arrive.</p>
+            <p className="premium-empty">Waiting for a face</p>
           )}
-        </div>
-      </article>
+        </article>
+      </section>
     </aside>
   )
 }
