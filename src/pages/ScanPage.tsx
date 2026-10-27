@@ -14,7 +14,6 @@ import { SignalChart, SpectrumChart } from '../components/SignalChart'
 import { RegionTrustLines } from '../components/RegionTrustLines'
 import { DesktopPulseRail } from '../components/DesktopPulseRail'
 import { PhoneVitals } from '../components/PhoneVitals'
-import { SavedScanBar } from '../components/SavedScanBar'
 import { VitalsScanRow } from '../components/VitalsScanRow'
 import { SiteNav } from '../components/SiteNav'
 import { useContent } from '../lib/content'
@@ -26,11 +25,7 @@ import {
   sampleRoiRgbFromFrame,
 } from '../lib/mediapipe/faceLandmarker'
 import { captureFaceThumbnail } from '../lib/feed/cardMedia'
-import {
-  feedVideoUrl,
-  listPublicFeed,
-  type PublicFeedPost,
-} from '../lib/feed/publicFeed'
+import { feedVideoUrl } from '../lib/feed/publicFeed'
 import type { SpotGlow } from '../lib/rppg/faceSpots'
 import {
   fetchDemoClipList,
@@ -134,8 +129,6 @@ export function ScanPage() {
   /** Shown only after the open camera sees a cap over the forehead. */
   const [hatPrompt, setHatPrompt] = useState(false)
   const [hatReason, setHatReason] = useState<HatBlockReason | null>(null)
-  const [savedPosts, setSavedPosts] = useState<PublicFeedPost[]>([])
-  const [replayId, setReplayId] = useState<string | null>(null)
   const [analyzePct, setAnalyzePct] = useState<number | null>(null)
   const hatPromptRef = useRef(false)
   const hatReasonRef = useRef<HatBlockReason | null>(null)
@@ -176,10 +169,6 @@ export function ScanPage() {
   controlsRef.current = controls
   const inputModeRef = useRef(inputMode)
   inputModeRef.current = inputMode
-  const replaySavedRef = useRef<(post: PublicFeedPost) => Promise<void>>(
-    async () => undefined,
-  )
-
   const synthetic = useMemo(() => {
     if (inputMode !== 'synthetic') return null
     return generateSyntheticSample({
@@ -296,21 +285,6 @@ export function ScanPage() {
   useEffect(() => () => resetScanSave(), [])
 
   useEffect(() => {
-    let live = true
-    listPublicFeed()
-      .then((posts) => {
-        if (!live) return
-        setSavedPosts(posts.filter((post) => post.hasVideo))
-      })
-      .catch(() => {
-        if (live) setSavedPosts([])
-      })
-    return () => {
-      live = false
-    }
-  }, [])
-
-  useEffect(() => {
     const video = videoRef.current
     if (!video) return
     const onTime = () => {
@@ -331,12 +305,14 @@ export function ScanPage() {
     void video.play().catch(() => undefined)
   }, [hasVideo, stage, capturing, liveEstimating, activeSessionId])
 
-  // Deep-link from marketing home: /scan?action=sample|upload|webcam
+  // Deep-link: /scan?action=sample|upload|webcam, or /scan?replay=<feed id>
   useEffect(() => {
     const action = searchParams.get('action')
-    if (!action) return
+    const replay = searchParams.get('replay')
+    if (!action && !replay) return
     const id = window.setTimeout(() => {
-      if (action === 'sample') void handleInputMode('synthetic')
+      if (replay) void replaySaved(replay)
+      else if (action === 'sample') void handleInputMode('synthetic')
       else if (action === 'upload') openUploadPicker()
       else if (action === 'webcam') void handleInputMode('webcam')
     }, 50)
@@ -1498,28 +1474,23 @@ export function ScanPage() {
     await drainUploadQueue(opts?.persist !== false)
   }
 
-  async function replaySaved(post: PublicFeedPost) {
-    setReplayId(post.id)
+  async function replaySaved(id: string) {
     setError(null)
-    setStatus(`Loading ${post.nickname?.trim() || 'a saved scan'}…`)
+    setStatus('Loading a saved scan…')
     try {
-      const res = await fetch(feedVideoUrl(post.id))
+      const res = await fetch(feedVideoUrl(id))
       if (!res.ok) throw new Error('Could not load that saved video.')
       const blob = await res.blob()
-      const file = new File(
-        [blob],
-        `${post.nickname?.trim() || 'saved'}.mp4`,
-        { type: blob.type || post.videoMime || 'video/mp4' },
-      )
+      const file = new File([blob], 'saved.mp4', {
+        type: blob.type || 'video/mp4',
+      })
       await enqueueFiles([file], { persist: false })
     } catch (e) {
-      setReplayId(null)
       setError(
         e instanceof Error ? e.message : 'Could not play that saved scan.',
       )
     }
   }
-  replaySavedRef.current = replaySaved
 
   async function drainUploadQueue(persist = true) {
     if (processingQueueRef.current) return
@@ -1672,14 +1643,6 @@ export function ScanPage() {
 
       <main className="scan-page" id="monitor">
         <section className="scan-studio">
-          <header className="scan-studio-head">
-            <p className="scan-kicker">Face video</p>
-            <h1>Scan</h1>
-            <p className="scan-lede">
-              Ten seconds of a face, scaled to a one minute rate.
-            </p>
-          </header>
-
         <input
           ref={fileInputRef}
           type="file"
@@ -1719,13 +1682,6 @@ export function ScanPage() {
           {vitalsEmptyHint && (stage === 'idle' || stage === 'done') ? (
             <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
           ) : null}
-
-          <SavedScanBar
-            posts={savedPosts}
-            activeId={replayId}
-            busy={busy || capturing}
-            onPlay={(post) => void replaySaved(post)}
-          />
 
           <div className="scan-session-frame product-frame">
             <div className="scan-desktop-board">

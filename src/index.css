@@ -2204,9 +2204,18 @@
   }
 
   .post-card-caption {
-    margin: 0.45rem 0.85rem 0.55rem;
+    margin: 0.45rem 0.85rem 0.35rem;
     font-size: 0.92rem;
     line-height: 1.35;
+  }
+
+  .post-card-scan {
+    display: inline-block;
+    margin: 0 0.85rem 0.65rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--site-accent-deep, #1a7f72);
+    text-decoration: none;
   }
 
   .post-card-media {

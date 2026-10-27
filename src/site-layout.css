@@ -1180,6 +1180,7 @@
 
   /* —— Scan page —— */
   .scan-page {
+    padding-top: calc(var(--nav-h) + 0.65rem);
     padding-left: 1.25rem;
     padding-right: 1.25rem;
     padding-bottom: 2.5rem;
@@ -1912,67 +1913,6 @@
     justify-content: center;
   }
 
-  .saved-scan-bar {
-    width: min(100%, 26.5rem);
-    margin: 0 auto 0.75rem;
-  }
-
-  .saved-scan-label,
-  .saved-scan-empty {
-    margin: 0 0 0.4rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--site-ink-soft);
-  }
-
-  .saved-scan-empty {
-    width: min(100%, 26.5rem);
-    margin: 0 auto 0.75rem;
-    text-transform: none;
-    font-weight: 500;
-    letter-spacing: 0;
-    line-height: 1.4;
-  }
-
-  .saved-scan-list {
-    display: flex;
-    gap: 0.4rem;
-    overflow-x: auto;
-    padding-bottom: 0.15rem;
-  }
-
-  .saved-scan-chip {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.1rem;
-    flex: 0 0 auto;
-    border: 1px solid var(--site-line);
-    border-radius: 0.75rem;
-    background: #fff;
-    padding: 0.4rem 0.7rem;
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-  }
-
-  .saved-scan-chip.is-active {
-    border-color: #2f6fed;
-    box-shadow: inset 0 0 0 1px #2f6fed;
-  }
-
-  .saved-scan-chip:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-
-  .saved-scan-bpm {
-    font-size: 0.72rem;
-    color: var(--site-ink-soft);
-  }
-
   .scan-vitals-strip {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2004,9 +1944,7 @@
       max-height: none;
     }
 
-    .phone-scan,
-    .saved-scan-bar,
-    .saved-scan-empty {
+    .phone-scan {
       width: 100%;
     }
 
