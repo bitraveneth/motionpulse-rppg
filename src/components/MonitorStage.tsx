@@ -1,6 +1,14 @@
-import { useEffect, useRef } from 'react'
-import type { FrameLandmarks } from '../lib/rppg/types'
+import { useEffect, useRef, useState } from 'react'
 import { faceBoxFromLandmarks } from '../lib/rppg/faceBox'
+import { FACE_MESH_EDGES, FACE_MESH_NODES } from '../lib/rppg/faceMesh'
+import {
+  landmarkCentroid,
+  spotHeat,
+  type SpotGlow,
+} from '../lib/rppg/faceSpots'
+import { nearestLandmarkFrame } from '../lib/mediapipe/landmarkTime'
+import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
+import { ROI_IDS, type FrameLandmarks, type RoiId } from '../lib/rppg/types'
 import type { InputMode } from './ControlsPanel'
 
 type Props = {
@@ -30,6 +38,17 @@ type Props = {
   hatReason?: 'hat' | 'face' | null
   onHatClear?: () => void
   onHatSkip?: () => void
+  /** Per-area pulse quality. Null draws white spots until a pulse is caught. */
+  spots?: Record<RoiId, SpotGlow> | null
+  /**
+   * Landmark samples keyed by video time. When set, the mesh follows the
+   * frame on screen instead of a single stored face.
+   */
+  landmarkTrack?: { frames: FrameLandmarks[]; timesMs: number[] } | null
+  /** 0–1 bar along the bottom of the camera. Hidden when null. */
+  progress?: number | null
+  /** Stop a webcam capture early. Hidden when null. */
+  onStop?: (() => void) | null
 }
 
 /** Large monitoring surface: face video + detection box + timeline slider. */
@@ -55,11 +74,31 @@ export function MonitorStage({
   hatReason = null,
   onHatClear,
   onHatSkip,
+  spots = null,
+  landmarkTrack = null,
+  progress = null,
+  onStop = null,
 }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null)
+  const [glowTick, setGlowTick] = useState(0)
   const box = faceBoxFromLandmarks(landmarks)
   const showLiveVideo =
     hasVideo && (inputMode === 'webcam' || inputMode === 'upload')
+
+  useEffect(() => {
+    if (!landmarks) return
+    let raf = 0
+    let last = 0
+    const loop = (now: number) => {
+      if (now - last > 90) {
+        last = now
+        setGlowTick(now)
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [landmarks])
 
   useEffect(() => {
     const canvas = overlayRef.current
@@ -93,55 +132,36 @@ export function MonitorStage({
       ctx.drawImage(src, dx, dy, dw, dh)
     }
 
-    if (!box) return
+    const video = videoRef.current
+    const shown = landmarksForScreen(landmarks, landmarkTrack, video)
+    const shownBox = faceBoxFromLandmarks(shown)
+    const srcW = showLiveVideo ? video?.videoWidth ?? 0 : src?.width ?? 0
+    const srcH = showLiveVideo ? video?.videoHeight ?? 0 : src?.height ?? 0
+    const fitted = fittedFrame(w, h, srcW, srcH)
+    const { ox, oy, ow, oh } = fitted
 
-    // Map box into the drawn content rect when compositing from analysis canvas
-    let ox = 0
-    let oy = 0
-    let ow = w
-    let oh = h
-    if (!showLiveVideo && src && src.width > 0) {
-      const scale = Math.min(w / src.width, h / src.height)
-      ow = src.width * scale
-      oh = src.height * scale
-      ox = (w - ow) / 2
-      oy = (h - oh) / 2
+    if (!shownBox && !shown) return
+
+    if (shownBox) {
+      drawRoiFrame(
+        ctx,
+        ox + shownBox.x * ow,
+        oy + shownBox.y * oh,
+        shownBox.w * ow,
+        shownBox.h * oh,
+      )
     }
 
-    const x = ox + box.x * ow
-    const y = oy + box.y * oh
-    const bw = box.w * ow
-    const bh = box.h * oh
-    const corner = Math.min(22, bw * 0.12, bh * 0.12)
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
-    ctx.lineWidth = 2.5
-    ctx.strokeRect(x, y, bw, bh)
-
-    ctx.strokeStyle = '#2EC4B6'
-    ctx.lineWidth = 3.5
-    ctx.beginPath()
-    ctx.moveTo(x, y + corner)
-    ctx.lineTo(x, y)
-    ctx.lineTo(x + corner, y)
-    ctx.moveTo(x + bw - corner, y)
-    ctx.lineTo(x + bw, y)
-    ctx.lineTo(x + bw, y + corner)
-    ctx.moveTo(x, y + bh - corner)
-    ctx.lineTo(x, y + bh)
-    ctx.lineTo(x + corner, y + bh)
-    ctx.moveTo(x + bw - corner, y + bh)
-    ctx.lineTo(x + bw, y + bh)
-    ctx.lineTo(x + bw, y + bh - corner)
-    ctx.stroke()
-
-    ctx.fillStyle = 'rgba(14, 107, 106, 0.88)'
-    ctx.font = '600 12px "Instrument Sans", sans-serif'
-    const labelY = Math.max(oy + 4, y - 22)
-    ctx.fillRect(x, labelY, 78, 20)
-    ctx.fillStyle = '#fff'
-    ctx.fillText('Face ROI', x + 8, labelY + 14)
-  }, [box, landmarks, canvasRef, showLiveVideo, scrub, busy])
+    drawFaceMarks(ctx, {
+      landmarks: shown,
+      ox,
+      oy,
+      ow,
+      oh,
+      spots,
+      now: glowTick || performance.now(),
+    })
+  }, [landmarks, landmarkTrack, canvasRef, showLiveVideo, scrub, busy, spots, videoRef, glowTick])
 
   const timeLabel =
     durationSec > 0
@@ -178,6 +198,16 @@ export function MonitorStage({
           </div>
         ) : null}
         <canvas ref={overlayRef} className="monitor-overlay" aria-hidden />
+        {onStop ? (
+          <button type="button" className="monitor-stop" onClick={onStop}>
+            Stop
+          </button>
+        ) : null}
+        {progress != null ? (
+          <div className="monitor-progress" aria-hidden>
+            <span style={{ width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%` }} />
+          </div>
+        ) : null}
         {hatPrompt ? (
           <div className="hat-prompt hat-banner" role="status">
             <h2 id="hat-prompt-title">
@@ -277,6 +307,154 @@ export function MonitorStage({
       ) : null}
     </section>
   )
+}
+
+function landmarksForScreen(
+  fallback: FrameLandmarks | null,
+  track: { frames: FrameLandmarks[]; timesMs: number[] } | null,
+  video: HTMLVideoElement | null,
+): FrameLandmarks | null {
+  if (
+    !track ||
+    !video ||
+    video.srcObject ||
+    track.frames.length === 0 ||
+    track.timesMs.length !== track.frames.length ||
+    !Number.isFinite(video.duration) ||
+    video.duration <= 0 ||
+    !Number.isFinite(video.currentTime)
+  ) {
+    return fallback
+  }
+  return nearestLandmarkFrame(track.frames, track.timesMs, video.currentTime * 1000)
+}
+
+function fittedFrame(
+  frameW: number,
+  frameH: number,
+  srcW: number,
+  srcH: number,
+): { ox: number; oy: number; ow: number; oh: number } {
+  if (srcW < 2 || srcH < 2) {
+    return { ox: 0, oy: 0, ow: frameW, oh: frameH }
+  }
+  const scale = Math.min(frameW / srcW, frameH / srcH)
+  const ow = srcW * scale
+  const oh = srcH * scale
+  return { ox: (frameW - ow) / 2, oy: (frameH - oh) / 2, ow, oh }
+}
+
+function meshPoint(
+  landmarks: FrameLandmarks,
+  index: number,
+  ox: number,
+  oy: number,
+  ow: number,
+  oh: number,
+): { x: number; y: number } | null {
+  const point = landmarks[index]
+  if (!point) return null
+  return { x: ox + point.x * ow, y: oy + point.y * oh }
+}
+
+function drawRoiFrame(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  bw: number,
+  bh: number,
+) {
+  const corner = Math.min(36, bw * 0.18, bh * 0.18)
+  ctx.save()
+  ctx.fillStyle = 'rgba(46, 230, 199, 0.14)'
+  ctx.fillRect(x, y, bw, bh)
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(x, y, bw, bh)
+  ctx.strokeStyle = '#3dffe0'
+  ctx.lineWidth = 5
+  ctx.lineCap = 'square'
+  ctx.beginPath()
+  ctx.moveTo(x, y + corner)
+  ctx.lineTo(x, y)
+  ctx.lineTo(x + corner, y)
+  ctx.moveTo(x + bw - corner, y)
+  ctx.lineTo(x + bw, y)
+  ctx.lineTo(x + bw, y + corner)
+  ctx.moveTo(x, y + bh - corner)
+  ctx.lineTo(x, y + bh)
+  ctx.lineTo(x + corner, y + bh)
+  ctx.moveTo(x + bw - corner, y + bh)
+  ctx.lineTo(x + bw, y + bh)
+  ctx.lineTo(x + bw, y + bh - corner)
+  ctx.stroke()
+  ctx.font = '700 12px sans-serif'
+  const label = 'ROI'
+  const labelW = ctx.measureText(label).width + 12
+  const labelH = 18
+  const labelX = x
+  const labelY = Math.max(0, y - labelH)
+  ctx.fillStyle = '#3dffe0'
+  ctx.fillRect(labelX, labelY, labelW, labelH)
+  ctx.fillStyle = '#04221c'
+  ctx.fillText(label, labelX + 6, labelY + 13)
+  ctx.restore()
+}
+
+function drawFaceMarks(
+  ctx: CanvasRenderingContext2D,
+  input: {
+    landmarks: FrameLandmarks | null
+    ox: number
+    oy: number
+    ow: number
+    oh: number
+    spots: Record<RoiId, SpotGlow> | null
+    now: number
+  },
+) {
+  const { landmarks, ox, oy, ow, oh, spots, now } = input
+  if (!landmarks || landmarks.length === 0) return
+
+  const breath = 0.55 + 0.45 * Math.sin(now / 420)
+  ctx.save()
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = `rgba(186, 230, 253, ${0.42 + breath * 0.18})`
+  ctx.lineWidth = 1.15
+  ctx.beginPath()
+  for (const [a, b] of FACE_MESH_EDGES) {
+    const p0 = meshPoint(landmarks, a, ox, oy, ow, oh)
+    const p1 = meshPoint(landmarks, b, ox, oy, ow, oh)
+    if (!p0 || !p1) continue
+    ctx.moveTo(p0.x, p0.y)
+    ctx.lineTo(p1.x, p1.y)
+  }
+  ctx.stroke()
+
+  for (const index of FACE_MESH_NODES) {
+    const point = meshPoint(landmarks, index, ox, oy, ow, oh)
+    if (!point) continue
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, 1.7, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(236, 249, 255, ${0.72 + breath * 0.2})`
+    ctx.fill()
+  }
+
+  // Soft ROI accents only — no large red/white blobs.
+  for (const id of ROI_IDS) {
+    const center = landmarkCentroid(landmarks, ROI_LANDMARK_INDICES[id])
+    if (!center) continue
+    const heat = spots ? spotHeat(spots[id]) : 0
+    if (heat < 0.12) continue
+    const cx = ox + center.x * ow
+    const cy = oy + center.y * oh
+    ctx.beginPath()
+    ctx.arc(cx, cy, 3.2 + heat * 1.4, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(125, 211, 252, ${0.35 + heat * 0.4})`
+    ctx.fill()
+  }
+  ctx.restore()
 }
 
 function formatTime(sec: number) {

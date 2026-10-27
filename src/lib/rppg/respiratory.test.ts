@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   breathScaleNote,
+  breathsFromPeakSpacing,
   estimateRespiratoryRate,
   estimateShownBreath,
 } from './respiratory'
@@ -18,6 +19,18 @@ describe('estimateRespiratoryRate', () => {
   it('returns null for short clips', () => {
     const s = sineSeries(0.25, 30, 3)
     expect(estimateRespiratoryRate(s, 30)).toBeNull()
+  })
+
+  it('keeps a breath on an 8 second window that lost one sample', () => {
+    const sampleRateHz = 12
+    const n = Math.round(8 * sampleRateHz) - 1
+    const s = Array.from({ length: n }, (_, i) =>
+      Math.sin((2 * Math.PI * 0.25 * i) / sampleRateHz),
+    )
+    const est = estimateRespiratoryRate(s, sampleRateHz)
+    expect(est).not.toBeNull()
+    expect(est!.breathsPerMin).toBeGreaterThan(13)
+    expect(est!.breathsPerMin).toBeLessThan(17)
   })
 
   it('scales a breath every 4 seconds in a 10 second clip to 15 per minute', () => {
@@ -52,6 +65,21 @@ describe('estimateRespiratoryRate', () => {
   it('returns null for flat / near-zero signal', () => {
     const s = Array.from({ length: 360 }, () => 0.001)
     expect(estimateRespiratoryRate(s, 30, { minSnr: 2 })).toBeNull()
+  })
+})
+
+describe('breathsFromPeakSpacing', () => {
+  it('scales two breaths four seconds apart to 15 per minute', () => {
+    const sampleRateHz = 12
+    const n = sampleRateHz * 10
+    const series = Array.from({ length: n }, (_, i) => {
+      const t = i / sampleRateHz
+      return Math.exp(-(((t % 4) - 0.4) ** 2) / 0.08)
+    })
+    const est = breathsFromPeakSpacing(series, sampleRateHz)
+    expect(est).not.toBeNull()
+    expect(est!.breathsPerMin).toBeGreaterThan(12)
+    expect(est!.breathsPerMin).toBeLessThan(18)
   })
 })
 

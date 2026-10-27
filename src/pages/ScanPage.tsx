@@ -12,7 +12,8 @@ import {
 import { ShareToFeed } from '../components/ShareToFeed'
 import { SignalChart, SpectrumChart } from '../components/SignalChart'
 import { RegionTrustLines } from '../components/RegionTrustLines'
-import { ScanVitalCards } from '../components/ScanVitalCards'
+import { DesktopPulseRail } from '../components/DesktopPulseRail'
+import { PhoneVitals } from '../components/PhoneVitals'
 import { VitalsScanRow } from '../components/VitalsScanRow'
 import { SiteNav } from '../components/SiteNav'
 import { useContent } from '../lib/content'
@@ -24,6 +25,8 @@ import {
   sampleRoiRgbFromFrame,
 } from '../lib/mediapipe/faceLandmarker'
 import { captureFaceThumbnail } from '../lib/feed/cardMedia'
+import { feedVideoUrl } from '../lib/feed/publicFeed'
+import type { SpotGlow } from '../lib/rppg/faceSpots'
 import {
   fetchDemoClipList,
   fetchDemoClipsAsFiles,
@@ -32,6 +35,11 @@ import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
 import { runPipeline, type PipelineResult } from '../lib/rppg/pipeline'
 import { conflictRiskLabel } from '../lib/rppg/conflict'
 import { estimateShownBreath, faceGreenSeries } from '../lib/rppg/respiratory'
+import {
+  heartRateFromPeaks,
+  hrvFromBeats,
+  shownHeartRate,
+} from '../lib/rppg/beatIntervals'
 import { generateSyntheticSample } from '../lib/rppg/synthetic'
 import { paintSyntheticPreview } from '../lib/rppg/syntheticPreview'
 import {
@@ -60,6 +68,7 @@ import type { RunSource } from '../lib/feed/types'
 
 type LiveBuffer = {
   frames: FrameLandmarks[]
+  timestampsMs?: number[]
   roiRgb: RoiRgbTrace
   sampleRateHz: number
 }
@@ -89,9 +98,9 @@ export function ScanPage() {
   const [searchParams] = useSearchParams()
   const c = useContent()
   const [controls, setControls] = useState<DemoControls>(DEFAULT_CONTROLS)
-  const [inputMode, setInputMode] = useState<InputMode>('synthetic')
+  const [inputMode, setInputMode] = useState<InputMode>('upload')
   const [status, setStatus] = useState(
-    'Sample ready — face preview below. Scrub the timeline, or upload several clips.',
+    'Choose Upload, Webcam, or Sample.',
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -101,8 +110,8 @@ export function ScanPage() {
   const [stageDetail, setStageDetail] = useState<string | undefined>()
   const [showStory, setShowStory] = useState(true)
   const [thumbnailData, setThumbnailData] = useState<string | null>(null)
-  const [scrub, setScrub] = useState(1)
-  const [durationSec, setDurationSec] = useState(12)
+  const [scrub, setScrub] = useState(0)
+  const [durationSec, setDurationSec] = useState(0)
   const [hasVideo, setHasVideo] = useState(false)
   const [sessionRuns, setSessionRuns] = useState<SessionRun[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -120,6 +129,7 @@ export function ScanPage() {
   /** Shown only after the open camera sees a cap over the forehead. */
   const [hatPrompt, setHatPrompt] = useState(false)
   const [hatReason, setHatReason] = useState<HatBlockReason | null>(null)
+  const [analyzePct, setAnalyzePct] = useState<number | null>(null)
   const hatPromptRef = useRef(false)
   const hatReasonRef = useRef<HatBlockReason | null>(null)
   const hatSkipRef = useRef(false)
@@ -159,27 +169,27 @@ export function ScanPage() {
   controlsRef.current = controls
   const inputModeRef = useRef(inputMode)
   inputModeRef.current = inputMode
-
-  const synthetic = useMemo(
-    () =>
-      generateSyntheticSample({
-        durationSec: 12,
-        sampleRateHz: 30,
-        pulseBpm: controls.pulseBpm,
-        motionArtifactAmp: controls.motionArtifactAmp,
-        seed: 7,
-      }),
-    [controls.pulseBpm, controls.motionArtifactAmp],
-  )
+  const synthetic = useMemo(() => {
+    if (inputMode !== 'synthetic') return null
+    return generateSyntheticSample({
+      durationSec: 12,
+      sampleRateHz: 30,
+      pulseBpm: controls.pulseBpm,
+      motionArtifactAmp: controls.motionArtifactAmp,
+      seed: 7,
+    })
+  }, [inputMode, controls.pulseBpm, controls.motionArtifactAmp])
 
   const source: LiveBuffer | null =
-    inputMode === 'synthetic'
+    inputMode === 'synthetic' && synthetic
       ? {
           frames: synthetic.frames,
           roiRgb: synthetic.roiRgb,
           sampleRateHz: synthetic.sampleRateHz,
         }
-      : live
+      : inputMode === 'synthetic'
+        ? null
+        : live
 
   const result: PipelineResult | null = useMemo(() => {
     if (!source || source.frames.length < 16) return null
@@ -207,8 +217,24 @@ export function ScanPage() {
       source.sampleRateHz,
       result.motion.global,
       faceGreenSeries(source.roiRgb),
+      source.roiRgb,
     )
   }, [result, source])
+
+  const beats = useMemo(() => {
+    if (!result || !source) return null
+    const series =
+      result.suppression.gated.length > 24
+        ? result.suppression.gated
+        : result.candidate
+    return heartRateFromPeaks(series, source.sampleRateHz)
+  }, [result, source])
+
+  const heartBpm = shownHeartRate(result?.gatedBpm, beats)
+  const hrv = useMemo(
+    () => (beats ? hrvFromBeats(beats, result?.gatedBpm) : null),
+    [beats, result],
+  )
 
   const risk = result ? conflictRiskLabel(result.conflict.combined) : null
 
@@ -230,7 +256,7 @@ export function ScanPage() {
 
   // Keep synthetic duration in sync; paint a soft preview frame for the overlay.
   useEffect(() => {
-    if (inputMode !== 'synthetic') return
+    if (inputMode !== 'synthetic' || !synthetic) return
     setDurationSec(synthetic.frames.length / synthetic.sampleRateHz)
     setHasVideo(false)
     const canvas = canvasRef.current
@@ -255,23 +281,38 @@ export function ScanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMode])
 
-  // Seed the sample into the session once so multi-clip browse can include it.
-  useEffect(() => {
-    if (inputMode !== 'synthetic') return
-    if (sessionRunsRef.current.some((r) => r.source === 'sample')) return
-    ensureSampleInSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // Leaving the scan page ends the server-side scan session too.
   useEffect(() => () => resetScanSave(), [])
 
-  // Deep-link from marketing home: /scan?action=sample|upload|webcam
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const onTime = () => {
+      if (capturing || liveEstimating) return
+      if (!Number.isFinite(video.duration) || video.duration <= 0) return
+      setScrub(video.currentTime / video.duration)
+    }
+    video.addEventListener('timeupdate', onTime)
+    return () => video.removeEventListener('timeupdate', onTime)
+  }, [capturing, liveEstimating])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !hasVideo || stage !== 'done' || capturing || liveEstimating) {
+      return
+    }
+    video.loop = true
+    void video.play().catch(() => undefined)
+  }, [hasVideo, stage, capturing, liveEstimating, activeSessionId])
+
+  // Deep-link: /scan?action=sample|upload|webcam, or /scan?replay=<feed id>
   useEffect(() => {
     const action = searchParams.get('action')
-    if (!action) return
+    const replay = searchParams.get('replay')
+    if (!action && !replay) return
     const id = window.setTimeout(() => {
-      if (action === 'sample') void handleInputMode('synthetic')
+      if (replay) void replaySaved(replay)
+      else if (action === 'sample') void handleInputMode('synthetic')
       else if (action === 'upload') openUploadPicker()
       else if (action === 'webcam') void handleInputMode('webcam')
     }, 50)
@@ -505,10 +546,17 @@ export function ScanPage() {
   }
 
   function ensureSampleInSession() {
+    const sample = generateSyntheticSample({
+      durationSec: 12,
+      sampleRateHz: 30,
+      pulseBpm: controlsRef.current.pulseBpm,
+      motionArtifactAmp: controlsRef.current.motionArtifactAmp,
+      seed: 7,
+    })
     const buffer = {
-      frames: synthetic.frames,
-      roiRgb: synthetic.roiRgb,
-      sampleRateHz: synthetic.sampleRateHz,
+      frames: sample.frames,
+      roiRgb: sample.roiRgb,
+      sampleRateHz: sample.sampleRateHz,
     }
     let pipeline: PipelineResult | null = null
     try {
@@ -529,6 +577,7 @@ export function ScanPage() {
           buffer.sampleRateHz,
           pipeline.motion.global,
           faceGreenSeries(buffer.roiRgb),
+          buffer.roiRgb,
         )
       : null
     const risk = pipeline
@@ -616,11 +665,7 @@ export function ScanPage() {
       setHasVideo(false)
       setLiveEstimating(false)
       setDurationSec(12)
-      setLive({
-        frames: synthetic.frames,
-        roiRgb: synthetic.roiRgb,
-        sampleRateHz: synthetic.sampleRateHz,
-      })
+      setLive(null)
       ensureSampleInSession()
       setStatus(
         'Sample ready — scrub the timeline, or upload several clips and browse with the session slider.',
@@ -763,6 +808,7 @@ export function ScanPage() {
           buffer.sampleRateHz,
           pipeline.motion.global,
           faceGreenSeries(buffer.roiRgb),
+          buffer.roiRgb,
         )
       : null
     const durationSec = buffer.frames.length / buffer.sampleRateHz
@@ -835,6 +881,11 @@ export function ScanPage() {
       height,
       thumbnail: thumbRef.current,
     })
+  }
+
+  function requestStopCapture() {
+    if (!capturing || captureLeft == null) return
+    void finishWebcamCapture(captureGenRef.current)
   }
 
   async function startWebcam() {
@@ -1125,8 +1176,8 @@ export function ScanPage() {
           ? e.message
           : 'Could not start the camera. Check browser permissions.',
       )
-      setStatus('Camera unavailable — try the sample or upload a video instead.')
-      setInputMode('synthetic')
+      setStatus('Camera unavailable — use Upload or Sample instead.')
+      setInputMode('upload')
     }
   }
 
@@ -1156,6 +1207,7 @@ export function ScanPage() {
     setShowStory(false)
     setThumbnailData(null)
     thumbCapturedRef.current = false
+    setAnalyzePct(0)
     setStage('optimizing')
     setStageDetail('Capping resolution (~720p) and length (~15s)…')
     setStatus(`Optimizing “${file.name}”…`)
@@ -1230,12 +1282,21 @@ export function ScanPage() {
         minFrames: 16,
         updateEvery: 4,
         onProgress: (pct) => {
+          setAnalyzePct(pct)
           setStageDetail(`Reading clip… ${Math.round(pct * 100)}%`)
         },
         onPartial: (partial, meta) => {
           if (activeSessionIdRef.current !== clipId) return
           setLive(partial)
-          setScrub(1)
+          const lastMs = partial.timestampsMs[partial.timestampsMs.length - 1] ?? 0
+          const frac =
+            durationSec > 0 ? Math.min(1, Math.max(0, lastMs / 1000 / durationSec)) : 1
+          setScrub(frac)
+          const preview = videoRef.current
+          if (preview && Number.isFinite(preview.duration) && preview.duration > 0) {
+            const target = Math.min(preview.duration, Math.max(0, lastMs / 1000))
+            if (Math.abs(preview.currentTime - target) > 0.08) preview.currentTime = target
+          }
           setDurationSec(durationSec)
           setStatus(
             `Live estimate — ${meta.frameCount} frames (${Math.round(meta.pct * 100)}%)…`,
@@ -1337,6 +1398,7 @@ export function ScanPage() {
       setStatus('Upload failed — try another clip, or load the sample.')
       setLive(null)
       setLiveEstimating(false)
+      setAnalyzePct(null)
       setStage('idle')
       setShowStory(false)
       setHasVideo(false)
@@ -1355,11 +1417,15 @@ export function ScanPage() {
     } finally {
       setBusy(false)
       setLiveEstimating(false)
+      setAnalyzePct(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  async function enqueueFiles(files: FileList | File[]) {
+  async function enqueueFiles(
+    files: FileList | File[],
+    opts?: { persist?: boolean },
+  ) {
     const room = Math.max(0, SESSION_MAX - sessionRunsRef.current.length)
     const list = Array.from(files)
       .filter(
@@ -1405,10 +1471,28 @@ export function ScanPage() {
         ? `Queued ${list.length} clips — analyzing one at a time. Use the slider to browse.`
         : `Analyzing “${list[0]!.name}”…`,
     )
-    await drainUploadQueue()
+    await drainUploadQueue(opts?.persist !== false)
   }
 
-  async function drainUploadQueue() {
+  async function replaySaved(id: string) {
+    setError(null)
+    setStatus('Loading a saved scan…')
+    try {
+      const res = await fetch(feedVideoUrl(id))
+      if (!res.ok) throw new Error('Could not load that saved video.')
+      const blob = await res.blob()
+      const file = new File([blob], 'saved.mp4', {
+        type: blob.type || 'video/mp4',
+      })
+      await enqueueFiles([file], { persist: false })
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Could not play that saved scan.',
+      )
+    }
+  }
+
+  async function drainUploadQueue(persist = true) {
     if (processingQueueRef.current) return
     processingQueueRef.current = true
     try {
@@ -1441,20 +1525,23 @@ export function ScanPage() {
             fps,
             pipeline.motion.global,
             faceGreenSeries(buffer.roiRgb),
+            buffer.roiRgb,
           )
-          saveSettledClip({
-            source: 'upload',
-            pipeline,
-            settledBpm: pipeline.gatedBpm,
-            respiratoryBpm: breath ? breath.breathsPerMin : null,
-            riskLevel: riskLabel.level,
-            signalLabel: riskLabel.label,
-            durationSec,
-            fps,
-            width,
-            height,
-            thumbnail,
-          })
+          if (persist) {
+            saveSettledClip({
+              source: 'upload',
+              pipeline,
+              settledBpm: pipeline.gatedBpm,
+              respiratoryBpm: breath ? breath.breathsPerMin : null,
+              riskLevel: riskLabel.level,
+              signalLabel: riskLabel.label,
+              durationSec,
+              fps,
+              width,
+              height,
+              thumbnail,
+            })
+          }
           const done: SessionRun = {
             id: clipId,
             name: shortClipName(file.name),
@@ -1471,7 +1558,7 @@ export function ScanPage() {
             buffer,
           }
           patchSessionRun(clipId, done)
-          setSharePromptId(clipId)
+          if (persist) setSharePromptId(clipId)
           // Keep the stage on the clip that just finished if user hasn't jumped away.
           if (
             appliedSessionIdRef.current === clipId ||
@@ -1505,6 +1592,38 @@ export function ScanPage() {
   }
 
   const lastLandmarks = scrubLandmarks ?? source?.frames[source.frames.length - 1] ?? null
+  const faceSpots: Record<(typeof ROI_IDS)[number], SpotGlow> | null = result
+    ? {
+        forehead: {
+          quality: result.reliability.quality.forehead ?? 0,
+          motion: result.reliability.motion.forehead ?? 0,
+          weight: result.reliability.weights.forehead ?? 0,
+        },
+        leftCheek: {
+          quality: result.reliability.quality.leftCheek ?? 0,
+          motion: result.reliability.motion.leftCheek ?? 0,
+          weight: result.reliability.weights.leftCheek ?? 0,
+        },
+        rightCheek: {
+          quality: result.reliability.quality.rightCheek ?? 0,
+          motion: result.reliability.motion.rightCheek ?? 0,
+          weight: result.reliability.weights.rightCheek ?? 0,
+        },
+        lowerFace: {
+          quality: result.reliability.quality.lowerFace ?? 0,
+          motion: result.reliability.motion.lowerFace ?? 0,
+          weight: result.reliability.weights.lowerFace ?? 0,
+        },
+      }
+    : null
+  const scanProgress =
+    capturing && captureLeft != null
+      ? (10 - captureLeft) / 10
+      : liveEstimating
+        ? (analyzePct ?? 0)
+        : source
+          ? scrub
+          : null
   const hasResult = Boolean(result)
   const runSource = modeToSource(inputMode)
   const activeClip =
@@ -1523,15 +1642,7 @@ export function ScanPage() {
       <SiteNav primaryCta={{ label: c('cta.scan'), to: '/scan' }} />
 
       <main className="scan-page" id="monitor">
-        <header className="scan-page-head">
-          <h1>Scan session</h1>
-          <p>
-            Webcam records for 10 seconds, then stops and shows the result.
-            That reading is saved with the time. Post it if you want the face
-            video on the public feed.
-          </p>
-        </header>
-
+        <section className="scan-studio">
         <input
           ref={fileInputRef}
           type="file"
@@ -1548,7 +1659,19 @@ export function ScanPage() {
         {error ? (
           <div className="scan-alerts error-banner" role="alert">{error}</div>
         ) : null}
-        <AnalysisProgress stage={stage} detail={stageDetail} />
+        <AnalysisProgress
+          stage={stage}
+          detail={stageDetail}
+          fraction={
+            stage === 'estimating_pulse'
+              ? analyzePct
+              : stage === 'finding_face'
+                ? 0.4
+                : stage === 'optimizing'
+                  ? 0.16
+                  : null
+          }
+        />
         {queueLeft > 0 ? (
           <p className="scan-alerts queue-banner" role="status">
             {queueLeft} clip{queueLeft === 1 ? '' : 's'} left in the session queue…
@@ -1556,48 +1679,100 @@ export function ScanPage() {
         ) : null}
 
         <div className="scan-stage">
-          {!result ? (
+          {vitalsEmptyHint && (stage === 'idle' || stage === 'done') ? (
             <p className="vitals-scan-hint">{vitalsEmptyHint}</p>
           ) : null}
 
           <div className="scan-session-frame product-frame">
-            <div className="scan-session-monitor-wrap">
-              <MonitorStage
-                videoRef={videoRef}
-                canvasRef={canvasRef}
-                landmarks={lastLandmarks}
-                inputMode={inputMode}
-                busy={busy || capturing}
-                hasVideo={hasVideo}
-                scrub={scrub}
-                onScrub={handleScrub}
-                durationSec={durationSec}
-                onUploadClick={openUploadPicker}
-                onWebcam={requestWebcam}
-                onSample={() => void handleInputMode('synthetic')}
-                onLoadDemoSet={() => void loadDemoSet()}
-                demoLoading={demoLoading}
-                status={status}
-                showCtaBar
-                captureLeft={captureLeft}
-                hatPrompt={hatPrompt}
-                hatReason={hatReason}
-                onHatClear={recheckHat}
-                onHatSkip={skipHatCheck}
+            <div className="scan-desktop-board">
+              <DesktopPulseRail
+                heartBpm={heartBpm}
+                beats={beats}
+                hrv={hrv}
+                respiratory={respiratory}
+                liveEstimating={
+                  liveEstimating ||
+                  (busy && stage === 'estimating_pulse' && Boolean(result))
+                }
               />
+              <div className="phone-scan">
+                <div className="scan-session-monitor-wrap">
+                  <MonitorStage
+                    videoRef={videoRef}
+                    canvasRef={canvasRef}
+                    landmarks={lastLandmarks}
+                    inputMode={inputMode}
+                    busy={busy || capturing}
+                    hasVideo={hasVideo}
+                    scrub={scrub}
+                    onScrub={handleScrub}
+                    durationSec={durationSec}
+                    onUploadClick={openUploadPicker}
+                    onWebcam={requestWebcam}
+                    onSample={() => void handleInputMode('synthetic')}
+                    onLoadDemoSet={() => void loadDemoSet()}
+                    demoLoading={demoLoading}
+                    status={status}
+                    showCtaBar={false}
+                    captureLeft={captureLeft}
+                    hatPrompt={hatPrompt}
+                    hatReason={hatReason}
+                    onHatClear={recheckHat}
+                    onHatSkip={skipHatCheck}
+                    spots={faceSpots}
+                    landmarkTrack={
+                      source?.timestampsMs &&
+                      source.timestampsMs.length === source.frames.length
+                        ? { frames: source.frames, timesMs: source.timestampsMs }
+                        : null
+                    }
+                    progress={scanProgress}
+                    onStop={capturing && captureLeft != null ? requestStopCapture : null}
+                  />
+                </div>
+                <PhoneVitals
+                  heartBpm={heartBpm}
+                  hrv={hrv}
+                  respiratory={respiratory}
+                  liveEstimating={
+                    liveEstimating ||
+                    (busy && stage === 'estimating_pulse' && Boolean(result))
+                  }
+                />
+                <div className="phone-scan-actions" role="group" aria-label="Choose a video source">
+                  <button
+                    type="button"
+                    className="cta cta-secondary"
+                    onClick={openUploadPicker}
+                    disabled={busy || capturing}
+                  >
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    className="cta cta-secondary"
+                    onClick={requestWebcam}
+                    disabled={busy || capturing}
+                  >
+                    Webcam
+                  </button>
+                  <button
+                    type="button"
+                    className="cta cta-secondary"
+                    onClick={() => void handleInputMode('synthetic')}
+                    disabled={busy || capturing}
+                  >
+                    Sample
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <ScanVitalCards
-              result={result}
-              respiratory={respiratory}
-              liveEstimating={
-                liveEstimating ||
-                (busy && stage === 'estimating_pulse' && Boolean(result))
-              }
-            />
-
             {regionWeights ? (
-              <RegionTrustLines weights={regionWeights} />
+              <RegionTrustLines
+                weights={regionWeights}
+                className="scan-desktop-extra"
+              />
             ) : null}
 
             <div className="scan-session-strip-wrap">
@@ -1617,14 +1792,16 @@ export function ScanPage() {
             </div>
           </div>
 
-          <VitalsScanRow
-            result={result}
-            scrub={scrub}
-            liveEstimating={
-              liveEstimating ||
-              (busy && stage === 'estimating_pulse' && Boolean(result))
-            }
-          />
+          <div className="scan-desktop-extra">
+            <VitalsScanRow
+              result={result}
+              scrub={scrub}
+              liveEstimating={
+                liveEstimating ||
+                (busy && stage === 'estimating_pulse' && Boolean(result))
+              }
+            />
+          </div>
         </div>
 
         <div className="scan-tools site-section-inner">
@@ -1891,6 +2068,7 @@ export function ScanPage() {
             </div>
           </details>
         </div>
+        </section>
       </main>
 
       <footer className="site-foot">

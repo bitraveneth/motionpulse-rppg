@@ -5,38 +5,38 @@ export type AnalysisStage =
   | 'estimating_pulse'
   | 'done'
 
-const STAGES: { id: AnalysisStage; label: string }[] = [
-  { id: 'optimizing', label: 'Optimizing' },
-  { id: 'finding_face', label: 'Finding face' },
-  { id: 'estimating_pulse', label: 'Estimating pulse' },
-]
+const COPY: Record<Exclude<AnalysisStage, 'idle' | 'done'>, string> = {
+  optimizing: 'Preparing the video',
+  finding_face: 'Finding the face',
+  estimating_pulse: 'Reading the pulse',
+}
 
 type Props = {
   stage: AnalysisStage
   detail?: string
+  /** 0–1 fill of the track. */
+  fraction?: number | null
 }
 
-export function AnalysisProgress({ stage, detail }: Props) {
+/** One quiet line while a clip is being read. */
+export function AnalysisProgress({ stage, detail, fraction }: Props) {
   if (stage === 'idle' || stage === 'done') return null
-
-  const order = STAGES.map((s) => s.id)
-  const activeIdx = order.indexOf(stage)
+  const label = COPY[stage]
+  const pct =
+    fraction != null && Number.isFinite(fraction)
+      ? Math.round(Math.min(1, Math.max(0, fraction)) * 100)
+      : null
 
   return (
     <div className="analysis-progress" role="status" aria-live="polite">
-      <ol className="analysis-steps">
-        {STAGES.map((s, i) => {
-          const state =
-            i < activeIdx ? 'done' : i === activeIdx ? 'active' : 'todo'
-          return (
-            <li key={s.id} className={`analysis-step is-${state}`}>
-              <span className="analysis-step-dot" aria-hidden />
-              <span>{s.label}</span>
-            </li>
-          )
-        })}
-      </ol>
-      {detail && <p className="analysis-detail">{detail}</p>}
+      <div className="analysis-progress-top">
+        <p className="analysis-progress-label">{label}</p>
+        <p className="analysis-progress-pct">{pct != null ? `${pct}%` : ''}</p>
+      </div>
+      <div className="analysis-track" aria-hidden>
+        <span style={{ width: `${pct ?? 12}%` }} />
+      </div>
+      {detail ? <p className="analysis-detail">{detail}</p> : null}
     </div>
   )
 }

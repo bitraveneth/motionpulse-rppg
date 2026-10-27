@@ -9,11 +9,11 @@
  */
 
 import { pearsonCorr, standardize, std } from './dsp'
-import type { RoiRgbTrace } from './types'
+import type { RoiId, RoiRgbTrace } from './types'
 
-/** Breaths per minute we will report (normal resting range, a little of room). */
-const MIN_BPM = 12
-const MAX_BPM = 28
+/** Breaths per minute we will report. Stays above the fake ~8/min short-clip floor. */
+const MIN_BPM = 10
+const MAX_BPM = 30
 
 export type RespiratoryEstimate = {
   breathsPerMin: number
@@ -90,18 +90,34 @@ function pulseEnvelope(pulse: number[], sampleRateHz: number): number[] {
   return centeredSmooth(rect, 0.85, sampleRateHz)
 }
 
+/**
+ * An 8 second window loses one sample when it is aligned to motion, so
+ * 95 samples at 12 Hz is 7.9s and used to be thrown out every time.
+ */
+function coversMinDuration(
+  length: number,
+  sampleRateHz: number,
+  minDurationSec: number,
+): boolean {
+  if (length < 24) return false
+  const rate = Math.max(1e-6, sampleRateHz)
+  const durationSec = length / rate
+  return durationSec + 1 / rate >= minDurationSec - 1e-3
+}
+
 function rateFromSpacing(
   series: number[],
   sampleRateHz: number,
   minCorr: number,
+  minDurationSec: number,
 ): RespiratoryEstimate | null {
   const durationSec = series.length / Math.max(1e-6, sampleRateHz)
-  if (series.length < 24 || durationSec < 8) return null
+  if (!coversMinDuration(series.length, sampleRateHz, minDurationSec)) return null
 
   const wave = standardize(breathBand(series, sampleRateHz))
   if (std(wave) < 1e-8) return null
 
-  // Search a little wider than 12–28 so a real 12/min peak is not stuck on the edge.
+  // Search periods from about 10 to 34 breaths/min so a real 10/min peak is not stuck on the edge.
   const minLag = Math.max(2, Math.round((sampleRateHz * 60) / 34))
   const maxLag = Math.min(
     series.length - 8,
@@ -161,13 +177,58 @@ export function estimateRespiratoryRate(
   opts?: { minDurationSec?: number; minSnr?: number },
 ): RespiratoryEstimate | null {
   const minDurationSec = opts?.minDurationSec ?? 8
-  const durationSec = series.length / Math.max(1e-6, sampleRateHz)
-  if (durationSec < minDurationSec) return null
+  if (!coversMinDuration(series.length, sampleRateHz, minDurationSec)) return null
   const minCorr =
     opts?.minSnr != null && opts.minSnr > 0 && opts.minSnr <= 1
       ? opts.minSnr
-      : 0.4
-  return rateFromSpacing(series, sampleRateHz, minCorr)
+      : 0.25
+  return rateFromSpacing(series, sampleRateHz, minCorr, minDurationSec)
+}
+
+/**
+ * Breaths per minute from the gaps between slow peaks.
+ * Two peaks 4 seconds apart is 15 per minute: 1 interval × (60 / 4).
+ */
+export function breathsFromPeakSpacing(
+  series: number[],
+  sampleRateHz: number,
+): RespiratoryEstimate | null {
+  if (!coversMinDuration(series.length, sampleRateHz, 8)) return null
+  const wave = breathBand(series, sampleRateHz)
+  const scale = std(wave)
+  if (scale < 1e-8) return null
+  const norm = wave.map((value) => value / scale)
+  const minGap = Math.max(2, Math.round((sampleRateHz * 60) / 34))
+  const maxGap = Math.max(minGap + 1, Math.round((sampleRateHz * 60) / 10))
+  const peaks: number[] = []
+  for (let i = 1; i < norm.length - 1; i++) {
+    const value = norm[i]!
+    if (value <= norm[i - 1]! || value < norm[i + 1]! || value <= 0.2) continue
+    const previous = peaks[peaks.length - 1]
+    if (previous != null && i - previous < minGap) {
+      if (value > norm[previous]!) peaks[peaks.length - 1] = i
+      continue
+    }
+    peaks.push(i)
+  }
+  const intervals: number[] = []
+  for (let i = 1; i < peaks.length; i++) {
+    const gap = (peaks[i]! - peaks[i - 1]!) / sampleRateHz
+    if (gap * sampleRateHz < minGap || gap * sampleRateHz > maxGap) continue
+    intervals.push(gap)
+  }
+  if (intervals.length < 1) return null
+  const seconds = intervals.reduce((sum, value) => sum + value, 0)
+  const breathsPerMin = (intervals.length * 60) / seconds
+  if (breathsPerMin < MIN_BPM || breathsPerMin > MAX_BPM) return null
+  const durationSec = series.length / sampleRateHz
+  return {
+    breathsPerMin,
+    breathsInClip: (intervals.length * durationSec) / seconds,
+    durationSec,
+    snr: 0.3,
+    experimental: true,
+  }
 }
 
 /**
@@ -176,11 +237,14 @@ export function estimateRespiratoryRate(
  * pulse strength, and keeps the spacing that repeats most clearly.
  * That spacing is already scaled to breaths per minute.
  */
+const BREATH_ROIS: RoiId[] = ['forehead', 'leftCheek', 'rightCheek', 'lowerFace']
+
 export function estimateShownBreath(
   pulse: number[],
   sampleRateHz: number,
   motion?: number[] | null,
   slowColor?: number[] | null,
+  roiRgb?: RoiRgbTrace | null,
 ): RespiratoryEstimate | null {
   const found: RespiratoryEstimate[] = []
   const consider = (series: number[] | null | undefined) => {
@@ -188,9 +252,25 @@ export function estimateShownBreath(
     const est = estimateRespiratoryRate(series, sampleRateHz)
     if (est) found.push(est)
   }
+  const considerPeaks = (series: number[] | null | undefined) => {
+    if (!series || series.length < 24) return
+    const est = breathsFromPeakSpacing(series, sampleRateHz)
+    if (est) found.push(est)
+  }
   consider(slowColor)
+  considerPeaks(slowColor)
+  if (roiRgb) {
+    for (const id of BREATH_ROIS) {
+      const green = (roiRgb[id] ?? []).map((sample) => sample.g)
+      consider(green)
+      considerPeaks(green)
+    }
+  }
   consider(motion)
-  consider(pulseEnvelope(pulse, sampleRateHz))
+  considerPeaks(motion)
+  const envelope = pulseEnvelope(pulse, sampleRateHz)
+  consider(envelope)
+  considerPeaks(envelope)
   if (found.length === 0) return null
   found.sort((a, b) => b.snr - a.snr)
   return found[0]!

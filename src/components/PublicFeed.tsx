@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { FeedDetail } from '../lib/feed/detail'
 import { reliabilityFromRisk } from '../lib/feed/reliability'
 import type { RiskLevel } from '../lib/feed/types'
@@ -102,6 +103,11 @@ function PostCard({ post }: { post: PublicFeedPost }) {
       <p className="post-card-caption">
         Shared a {post.durationSec.toFixed(0)} second face scan.
       </p>
+      {post.hasVideo ? (
+        <Link className="post-card-scan" to={`/scan?replay=${post.id}`}>
+          Open in scan
+        </Link>
+      ) : null}
 
       {post.hasVideo ? (
         <video

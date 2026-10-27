@@ -9,6 +9,8 @@ import {
   type FaceLandmarkerResult,
 } from '@mediapipe/tasks-vision'
 import type { FrameLandmarks, Landmark } from '../rppg/types'
+import { pickLargestFace } from './landmarkTime'
+import { videoTimestampClock } from './videoTimestamp'
 
 const WASM_CDN =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.0/wasm'
@@ -27,7 +29,7 @@ export function getFaceLandmarker(): Promise<FaceLandmarker> {
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
-        numFaces: 1,
+        numFaces: 3,
         outputFaceBlendshapes: false,
         outputFacialTransformationMatrixes: false,
       })
@@ -41,7 +43,7 @@ export function getFaceLandmarker(): Promise<FaceLandmarker> {
           delegate: 'CPU',
         },
         runningMode: 'VIDEO',
-        numFaces: 1,
+        numFaces: 3,
       })
       landmarkerPromise = Promise.resolve(lm)
       if (err) {
@@ -56,7 +58,7 @@ export function getFaceLandmarker(): Promise<FaceLandmarker> {
 export function resultToLandmarks(
   result: FaceLandmarkerResult,
 ): FrameLandmarks | null {
-  const face = result.faceLandmarks?.[0]
+  const face = pickLargestFace(result.faceLandmarks)
   if (!face || face.length === 0) return null
   return face.map((p) => ({ x: p.x, y: p.y }) satisfies Landmark)
 }
@@ -70,13 +72,34 @@ export type DetectedFrame = {
  * Detect landmarks for a video element at currentTime.
  * Caller advances the video; this samples one frame.
  */
+function timestampMismatch(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('timestamp mismatch') || message.includes('norm_rect')
+}
+
+/**
+ * One Face Landmarker is reused for every clip. Its VIDEO clock cannot go
+ * backwards, so a later video that starts at 0 ms is shifted forward.
+ * If a previous clip already broke the graph, build a fresh one and retry.
+ */
 export async function detectVideoFrame(
   video: HTMLVideoElement,
   timestampMs: number,
 ): Promise<FrameLandmarks | null> {
-  const lm = await getFaceLandmarker()
-  const result = lm.detectForVideo(video, timestampMs)
-  return resultToLandmarks(result)
+  const run = async (frameMs: number) => {
+    const lm = await getFaceLandmarker()
+    return resultToLandmarks(
+      lm.detectForVideo(video, videoTimestampClock.next(frameMs)),
+    )
+  }
+  try {
+    return await run(timestampMs)
+  } catch (error) {
+    if (!timestampMismatch(error)) throw error
+    landmarkerPromise = null
+    videoTimestampClock.reset()
+    return run(timestampMs)
+  }
 }
 
 /** Sample landmarks across a video at ~targetFps (offline-ish scrub). */
@@ -91,14 +114,12 @@ export async function sampleVideoLandmarks(
   }
   const step = 1 / targetFps
   const frames: DetectedFrame[] = []
-  const lm = await getFaceLandmarker()
 
   for (let t = 0; t < duration; t += step) {
     video.currentTime = t
     await waitSeeked(video)
     const ts = Math.round(t * 1000)
-    const result = lm.detectForVideo(video, ts)
-    const landmarks = resultToLandmarks(result)
+    const landmarks = await detectVideoFrame(video, ts)
     if (landmarks) {
       frames.push({ landmarks, timestampMs: ts })
     }

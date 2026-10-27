@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { HomeHeroVisual } from '../components/HomeHeroVisual'
+import { HomeHeroSlider } from '../components/HomeHeroSlider'
 import { LocalLab } from '../components/LocalLab'
 import { SiteNav } from '../components/SiteNav'
 import {
@@ -34,7 +34,7 @@ export function HomePage() {
                 </Link>
               </div>
             </div>
-            <HomeHeroVisual />
+            <HomeHeroSlider />
           </div>
         </section>
 

@@ -6,6 +6,8 @@ export type SessionClipStatus = 'queued' | 'analyzing' | 'done' | 'error'
 /** Per-clip analysis buffer kept in-browser for one-by-one browsing. */
 export type SessionBuffer = {
   frames: FrameLandmarks[]
+  /** Video time of each face sample. Missing on older in-memory clips. */
+  timestampsMs?: number[]
   roiRgb: RoiRgbTrace
   sampleRateHz: number
 }

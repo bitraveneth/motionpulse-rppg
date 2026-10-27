@@ -32,6 +32,7 @@ export function SiteNav({ primaryCta }: Props) {
 
   const links = [
     { to: '/scan', label: c('nav.scan') },
+    { to: '/glossary', label: c('nav.glossary') },
     { to: '/feed', label: c('nav.feed') },
     { to: sectionHref('how-it-works'), label: c('nav.how') },
     { to: sectionHref('demo-tools'), label: c('nav.demo') },

@@ -3,8 +3,7 @@
  */
 
 import {
-  getFaceLandmarker,
-  resultToLandmarks,
+  detectVideoFrame,
   sampleRoiRgbFromFrame,
 } from '../mediapipe/faceLandmarker'
 import { ROI_LANDMARK_INDICES } from '../rppg/motion'
@@ -12,6 +11,8 @@ import { ROI_IDS, type FrameLandmarks, type RoiRgbTrace } from '../rppg/types'
 
 export type AnalysisBuffer = {
   frames: FrameLandmarks[]
+  /** Video time of each landmark sample, in milliseconds. */
+  timestampsMs: number[]
   roiRgb: RoiRgbTrace
   sampleRateHz: number
 }
@@ -87,7 +88,6 @@ export async function streamAnalyzeVideo(
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas unavailable')
 
-  const lm = await getFaceLandmarker()
   const frames: FrameLandmarks[] = []
   const timestampsMs: number[] = []
   const roiRgb = emptyRoiRgb()
@@ -96,6 +96,7 @@ export async function streamAnalyzeVideo(
 
   const snapshot = (): AnalysisBuffer => ({
     frames: frames.slice(),
+    timestampsMs: timestampsMs.slice(),
     roiRgb: {
       forehead: roiRgb.forehead.slice(),
       leftCheek: roiRgb.leftCheek.slice(),
@@ -116,8 +117,7 @@ export async function streamAnalyzeVideo(
     video.currentTime = t
     await waitSeeked(video)
     const ts = Math.round(t * 1000)
-    const result = lm.detectForVideo(video, ts)
-    const landmarks = resultToLandmarks(result)
+    const landmarks = await detectVideoFrame(video, ts)
     const pct = Math.min(1, t / duration)
     options.onProgress?.(pct)
 
