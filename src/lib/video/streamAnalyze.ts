@@ -11,6 +11,8 @@ import { ROI_IDS, type FrameLandmarks, type RoiRgbTrace } from '../rppg/types'
 
 export type AnalysisBuffer = {
   frames: FrameLandmarks[]
+  /** Video time of each landmark sample, in milliseconds. */
+  timestampsMs: number[]
   roiRgb: RoiRgbTrace
   sampleRateHz: number
 }
@@ -94,6 +96,7 @@ export async function streamAnalyzeVideo(
 
   const snapshot = (): AnalysisBuffer => ({
     frames: frames.slice(),
+    timestampsMs: timestampsMs.slice(),
     roiRgb: {
       forehead: roiRgb.forehead.slice(),
       leftCheek: roiRgb.leftCheek.slice(),

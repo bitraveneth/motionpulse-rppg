@@ -9,6 +9,7 @@ import {
   type FaceLandmarkerResult,
 } from '@mediapipe/tasks-vision'
 import type { FrameLandmarks, Landmark } from '../rppg/types'
+import { pickLargestFace } from './landmarkTime'
 import { videoTimestampClock } from './videoTimestamp'
 
 const WASM_CDN =
@@ -28,7 +29,7 @@ export function getFaceLandmarker(): Promise<FaceLandmarker> {
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
-        numFaces: 1,
+        numFaces: 3,
         outputFaceBlendshapes: false,
         outputFacialTransformationMatrixes: false,
       })
@@ -42,7 +43,7 @@ export function getFaceLandmarker(): Promise<FaceLandmarker> {
           delegate: 'CPU',
         },
         runningMode: 'VIDEO',
-        numFaces: 1,
+        numFaces: 3,
       })
       landmarkerPromise = Promise.resolve(lm)
       if (err) {
@@ -57,7 +58,7 @@ export function getFaceLandmarker(): Promise<FaceLandmarker> {
 export function resultToLandmarks(
   result: FaceLandmarkerResult,
 ): FrameLandmarks | null {
-  const face = result.faceLandmarks?.[0]
+  const face = pickLargestFace(result.faceLandmarks)
   if (!face || face.length === 0) return null
   return face.map((p) => ({ x: p.x, y: p.y }) satisfies Landmark)
 }

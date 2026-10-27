@@ -6,6 +6,7 @@ import {
   spotHeat,
   type SpotGlow,
 } from '../lib/rppg/faceSpots'
+import { nearestLandmarkFrame } from '../lib/mediapipe/landmarkTime'
 import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
 import { ROI_IDS, type FrameLandmarks, type RoiId } from '../lib/rppg/types'
 import type { InputMode } from './ControlsPanel'
@@ -39,6 +40,11 @@ type Props = {
   onHatSkip?: () => void
   /** Per-area pulse quality. Null draws white spots until a pulse is caught. */
   spots?: Record<RoiId, SpotGlow> | null
+  /**
+   * Landmark samples keyed by video time. When set, the mesh follows the
+   * frame on screen instead of a single stored face.
+   */
+  landmarkTrack?: { frames: FrameLandmarks[]; timesMs: number[] } | null
   /** 0–1 bar along the bottom of the camera. Hidden when null. */
   progress?: number | null
   /** Stop a webcam capture early. Hidden when null. */
@@ -69,6 +75,7 @@ export function MonitorStage({
   onHatClear,
   onHatSkip,
   spots = null,
+  landmarkTrack = null,
   progress = null,
   onStop = null,
 }: Props) {
@@ -126,19 +133,27 @@ export function MonitorStage({
     }
 
     const video = videoRef.current
+    const shown = landmarksForScreen(landmarks, landmarkTrack, video)
+    const shownBox = faceBoxFromLandmarks(shown)
     const srcW = showLiveVideo ? video?.videoWidth ?? 0 : src?.width ?? 0
     const srcH = showLiveVideo ? video?.videoHeight ?? 0 : src?.height ?? 0
     const fitted = fittedFrame(w, h, srcW, srcH)
     const { ox, oy, ow, oh } = fitted
 
-    if (!box && !landmarks) return
+    if (!shownBox && !shown) return
 
-    if (box) {
-      drawRoiFrame(ctx, ox + box.x * ow, oy + box.y * oh, box.w * ow, box.h * oh)
+    if (shownBox) {
+      drawRoiFrame(
+        ctx,
+        ox + shownBox.x * ow,
+        oy + shownBox.y * oh,
+        shownBox.w * ow,
+        shownBox.h * oh,
+      )
     }
 
     drawFaceMarks(ctx, {
-      landmarks,
+      landmarks: shown,
       ox,
       oy,
       ow,
@@ -146,7 +161,7 @@ export function MonitorStage({
       spots,
       now: glowTick || performance.now(),
     })
-  }, [box, landmarks, canvasRef, showLiveVideo, scrub, busy, spots, videoRef, glowTick])
+  }, [landmarks, landmarkTrack, canvasRef, showLiveVideo, scrub, busy, spots, videoRef, glowTick])
 
   const timeLabel =
     durationSec > 0
@@ -292,6 +307,26 @@ export function MonitorStage({
       ) : null}
     </section>
   )
+}
+
+function landmarksForScreen(
+  fallback: FrameLandmarks | null,
+  track: { frames: FrameLandmarks[]; timesMs: number[] } | null,
+  video: HTMLVideoElement | null,
+): FrameLandmarks | null {
+  if (
+    !track ||
+    !video ||
+    video.srcObject ||
+    track.frames.length === 0 ||
+    track.timesMs.length !== track.frames.length ||
+    !Number.isFinite(video.duration) ||
+    video.duration <= 0 ||
+    !Number.isFinite(video.currentTime)
+  ) {
+    return fallback
+  }
+  return nearestLandmarkFrame(track.frames, track.timesMs, video.currentTime * 1000)
 }
 
 function fittedFrame(

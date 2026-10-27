@@ -68,6 +68,7 @@ import type { RunSource } from '../lib/feed/types'
 
 type LiveBuffer = {
   frames: FrameLandmarks[]
+  timestampsMs?: number[]
   roiRgb: RoiRgbTrace
   sampleRateHz: number
 }
@@ -222,6 +223,7 @@ export function ScanPage() {
       source.sampleRateHz,
       result.motion.global,
       faceGreenSeries(source.roiRgb),
+      source.roiRgb,
     )
   }, [result, source])
 
@@ -588,6 +590,7 @@ export function ScanPage() {
           buffer.sampleRateHz,
           pipeline.motion.global,
           faceGreenSeries(buffer.roiRgb),
+          buffer.roiRgb,
         )
       : null
     const risk = pipeline
@@ -822,6 +825,7 @@ export function ScanPage() {
           buffer.sampleRateHz,
           pipeline.motion.global,
           faceGreenSeries(buffer.roiRgb),
+          buffer.roiRgb,
         )
       : null
     const durationSec = buffer.frames.length / buffer.sampleRateHz
@@ -1301,7 +1305,15 @@ export function ScanPage() {
         onPartial: (partial, meta) => {
           if (activeSessionIdRef.current !== clipId) return
           setLive(partial)
-          setScrub(1)
+          const lastMs = partial.timestampsMs[partial.timestampsMs.length - 1] ?? 0
+          const frac =
+            durationSec > 0 ? Math.min(1, Math.max(0, lastMs / 1000 / durationSec)) : 1
+          setScrub(frac)
+          const preview = videoRef.current
+          if (preview && Number.isFinite(preview.duration) && preview.duration > 0) {
+            const target = Math.min(preview.duration, Math.max(0, lastMs / 1000))
+            if (Math.abs(preview.currentTime - target) > 0.08) preview.currentTime = target
+          }
           setDurationSec(durationSec)
           setStatus(
             `Live estimate — ${meta.frameCount} frames (${Math.round(meta.pct * 100)}%)…`,
@@ -1535,6 +1547,7 @@ export function ScanPage() {
             fps,
             pipeline.motion.global,
             faceGreenSeries(buffer.roiRgb),
+            buffer.roiRgb,
           )
           if (persist) {
             saveSettledClip({
@@ -1731,6 +1744,12 @@ export function ScanPage() {
                     onHatClear={recheckHat}
                     onHatSkip={skipHatCheck}
                     spots={faceSpots}
+                    landmarkTrack={
+                      source?.timestampsMs &&
+                      source.timestampsMs.length === source.frames.length
+                        ? { frames: source.frames, timesMs: source.timestampsMs }
+                        : null
+                    }
                     progress={scanProgress}
                     onStop={capturing && captureLeft != null ? requestStopCapture : null}
                   />

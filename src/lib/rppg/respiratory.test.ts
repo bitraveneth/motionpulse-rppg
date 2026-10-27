@@ -20,6 +20,18 @@ describe('estimateRespiratoryRate', () => {
     expect(estimateRespiratoryRate(s, 30)).toBeNull()
   })
 
+  it('keeps a breath on an 8 second window that lost one sample', () => {
+    const sampleRateHz = 12
+    const n = Math.round(8 * sampleRateHz) - 1
+    const s = Array.from({ length: n }, (_, i) =>
+      Math.sin((2 * Math.PI * 0.25 * i) / sampleRateHz),
+    )
+    const est = estimateRespiratoryRate(s, sampleRateHz)
+    expect(est).not.toBeNull()
+    expect(est!.breathsPerMin).toBeGreaterThan(13)
+    expect(est!.breathsPerMin).toBeLessThan(17)
+  })
+
   it('scales a breath every 4 seconds in a 10 second clip to 15 per minute', () => {
     const s = sineSeries(0.25, 30, 10)
     const est = estimateRespiratoryRate(s, 30)
