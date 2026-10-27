@@ -1087,6 +1087,188 @@
     max-height: min(52vh, 480px);
   }
 
+  .phone-scan {
+    width: min(100%, 26.5rem);
+    margin-inline: auto;
+    background: #fff;
+    border: 1px solid var(--site-line);
+    border-radius: 1.35rem;
+    overflow: hidden;
+    box-shadow: 0 18px 40px -28px rgba(12, 34, 51, 0.5);
+  }
+
+  .scan-session-frame.product-frame .phone-scan .monitor-frame {
+    aspect-ratio: 3 / 4;
+    max-height: none;
+    border-radius: 0;
+    background: #101418;
+    box-shadow: none;
+  }
+
+  .phone-scan .monitor-quality,
+  .phone-scan .monitor-timeline,
+  .phone-scan .monitor-status,
+  .phone-scan .monitor-actions {
+    display: none;
+  }
+
+  .monitor-stop {
+    position: absolute;
+    left: 50%;
+    bottom: 0.85rem;
+    z-index: 5;
+    transform: translateX(-50%);
+    border: 0;
+    border-radius: 999px;
+    padding: 0.55rem 1.45rem;
+    background: #2f6fed;
+    color: #fff;
+    font: 700 0.78rem/1 var(--font-body, inherit);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .monitor-progress {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 4;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  .monitor-progress > span {
+    display: block;
+    height: 100%;
+    background: #3dbe9b;
+  }
+
+  .phone-vitals {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .phone-vital {
+    min-width: 0;
+    padding: 0.75rem 0.9rem 0.85rem;
+    border-right: 1px solid #ece7e2;
+    border-bottom: 1px solid #ece7e2;
+  }
+
+  .phone-vital:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .phone-vital-label {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8a8178;
+  }
+
+  .phone-vital-value {
+    display: block;
+    margin-top: 0.2rem;
+    font-family: var(--font-display);
+    font-size: 1.85rem;
+    font-weight: 650;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .phone-vital-value.is-live {
+    color: #c2412d;
+  }
+
+  .phone-vital-value-word {
+    font-size: 1.35rem;
+  }
+
+  .phone-vital-unit {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.72rem;
+    color: #8a8178;
+  }
+
+  .phone-scan-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.4rem;
+    padding: 0.65rem;
+  }
+
+  .phone-scan-actions .cta {
+    width: 100%;
+    min-height: 2.4rem;
+    justify-content: center;
+  }
+
+  .saved-scan-bar {
+    width: min(100%, 26.5rem);
+    margin: 0 auto 0.75rem;
+  }
+
+  .saved-scan-label,
+  .saved-scan-empty {
+    margin: 0 0 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--site-ink-soft);
+  }
+
+  .saved-scan-empty {
+    width: min(100%, 26.5rem);
+    margin: 0 auto 0.75rem;
+    text-transform: none;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1.4;
+  }
+
+  .saved-scan-list {
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+  }
+
+  .saved-scan-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    flex: 0 0 auto;
+    border: 1px solid var(--site-line);
+    border-radius: 0.75rem;
+    background: #fff;
+    padding: 0.4rem 0.7rem;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  .saved-scan-chip.is-active {
+    border-color: #2f6fed;
+    box-shadow: inset 0 0 0 1px #2f6fed;
+  }
+
+  .saved-scan-chip:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .saved-scan-bpm {
+    font-size: 0.72rem;
+    color: var(--site-ink-soft);
+  }
+
   .scan-vitals-strip {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1115,7 +1297,23 @@
     }
 
     .scan-stage .monitor-frame {
-      max-height: 46vh;
+      max-height: none;
+    }
+
+    .phone-scan,
+    .saved-scan-bar,
+    .saved-scan-empty {
+      width: 100%;
+    }
+
+    .phone-scan {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .scan-desktop-extra {
+      display: none;
     }
 
     .scan-vitals-strip {

@@ -1,6 +1,13 @@
-import { useEffect, useRef } from 'react'
-import type { FrameLandmarks } from '../lib/rppg/types'
+import { useEffect, useRef, useState } from 'react'
 import { faceBoxFromLandmarks } from '../lib/rppg/faceBox'
+import {
+  landmarkCentroid,
+  spotHeat,
+  strongestSpot,
+  type SpotGlow,
+} from '../lib/rppg/faceSpots'
+import { ROI_LANDMARK_INDICES } from '../lib/rppg/motion'
+import { ROI_IDS, type FrameLandmarks, type RoiId } from '../lib/rppg/types'
 import type { InputMode } from './ControlsPanel'
 
 type Props = {
@@ -30,6 +37,12 @@ type Props = {
   hatReason?: 'hat' | 'face' | null
   onHatClear?: () => void
   onHatSkip?: () => void
+  /** Per-area pulse quality. Null draws white spots until a pulse is caught. */
+  spots?: Record<RoiId, SpotGlow> | null
+  /** 0–1 bar along the bottom of the camera. Hidden when null. */
+  progress?: number | null
+  /** Stop a webcam capture early. Hidden when null. */
+  onStop?: (() => void) | null
 }
 
 /** Large monitoring surface: face video + detection box + timeline slider. */
@@ -55,11 +68,30 @@ export function MonitorStage({
   hatReason = null,
   onHatClear,
   onHatSkip,
+  spots = null,
+  progress = null,
+  onStop = null,
 }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null)
+  const [glowTick, setGlowTick] = useState(0)
   const box = faceBoxFromLandmarks(landmarks)
   const showLiveVideo =
     hasVideo && (inputMode === 'webcam' || inputMode === 'upload')
+
+  useEffect(() => {
+    if (!spots || !ROI_IDS.some((id) => spotHeat(spots[id]) > 0.08)) return
+    let raf = 0
+    let last = 0
+    const loop = (now: number) => {
+      if (now - last > 70) {
+        last = now
+        setGlowTick(now)
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [spots])
 
   useEffect(() => {
     const canvas = overlayRef.current
@@ -93,19 +125,25 @@ export function MonitorStage({
       ctx.drawImage(src, dx, dy, dw, dh)
     }
 
-    if (!box) return
+    const video = videoRef.current
+    const srcW = showLiveVideo ? video?.videoWidth ?? 0 : src?.width ?? 0
+    const srcH = showLiveVideo ? video?.videoHeight ?? 0 : src?.height ?? 0
+    const fitted = fittedFrame(w, h, srcW, srcH)
+    const { ox, oy, ow, oh } = fitted
 
-    // Map box into the drawn content rect when compositing from analysis canvas
-    let ox = 0
-    let oy = 0
-    let ow = w
-    let oh = h
-    if (!showLiveVideo && src && src.width > 0) {
-      const scale = Math.min(w / src.width, h / src.height)
-      ow = src.width * scale
-      oh = src.height * scale
-      ox = (w - ow) / 2
-      oy = (h - oh) / 2
+    if (!box && !landmarks) return
+
+    if (!box) {
+      drawFaceMarks(ctx, {
+        landmarks,
+        ox,
+        oy,
+        ow,
+        oh,
+        spots,
+        now: glowTick || performance.now(),
+      })
+      return
     }
 
     const x = ox + box.x * ow
@@ -135,13 +173,16 @@ export function MonitorStage({
     ctx.lineTo(x + bw, y + bh - corner)
     ctx.stroke()
 
-    ctx.fillStyle = 'rgba(14, 107, 106, 0.88)'
-    ctx.font = '600 12px "Instrument Sans", sans-serif'
-    const labelY = Math.max(oy + 4, y - 22)
-    ctx.fillRect(x, labelY, 78, 20)
-    ctx.fillStyle = '#fff'
-    ctx.fillText('Face ROI', x + 8, labelY + 14)
-  }, [box, landmarks, canvasRef, showLiveVideo, scrub, busy])
+    drawFaceMarks(ctx, {
+      landmarks,
+      ox,
+      oy,
+      ow,
+      oh,
+      spots,
+      now: glowTick || performance.now(),
+    })
+  }, [box, landmarks, canvasRef, showLiveVideo, scrub, busy, spots, videoRef, glowTick])
 
   const timeLabel =
     durationSec > 0
@@ -178,6 +219,16 @@ export function MonitorStage({
           </div>
         ) : null}
         <canvas ref={overlayRef} className="monitor-overlay" aria-hidden />
+        {onStop ? (
+          <button type="button" className="monitor-stop" onClick={onStop}>
+            Stop
+          </button>
+        ) : null}
+        {progress != null ? (
+          <div className="monitor-progress" aria-hidden>
+            <span style={{ width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%` }} />
+          </div>
+        ) : null}
         {hatPrompt ? (
           <div className="hat-prompt hat-banner" role="status">
             <h2 id="hat-prompt-title">
@@ -277,6 +328,74 @@ export function MonitorStage({
       ) : null}
     </section>
   )
+}
+
+function fittedFrame(
+  frameW: number,
+  frameH: number,
+  srcW: number,
+  srcH: number,
+): { ox: number; oy: number; ow: number; oh: number } {
+  if (srcW < 2 || srcH < 2) {
+    return { ox: 0, oy: 0, ow: frameW, oh: frameH }
+  }
+  const scale = Math.min(frameW / srcW, frameH / srcH)
+  const ow = srcW * scale
+  const oh = srcH * scale
+  return { ox: (frameW - ow) / 2, oy: (frameH - oh) / 2, ow, oh }
+}
+
+function drawFaceMarks(
+  ctx: CanvasRenderingContext2D,
+  input: {
+    landmarks: FrameLandmarks | null
+    ox: number
+    oy: number
+    ow: number
+    oh: number
+    spots: Record<RoiId, SpotGlow> | null
+    now: number
+  },
+) {
+  const { landmarks, ox, oy, ow, oh, spots, now } = input
+  if (!landmarks || landmarks.length === 0) return
+
+  ctx.save()
+  for (let i = 0; i < landmarks.length; i += 6) {
+    const point = landmarks[i]
+    if (!point) continue
+    ctx.beginPath()
+    ctx.arc(ox + point.x * ow, oy + point.y * oh, 1.15, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'
+    ctx.fill()
+  }
+
+  const lead = spots ? strongestSpot(spots) : null
+  const pulse = 0.5 + 0.5 * Math.sin(now / 280)
+  for (const id of ROI_IDS) {
+    const center = landmarkCentroid(landmarks, ROI_LANDMARK_INDICES[id])
+    if (!center) continue
+    const heat = spots ? spotHeat(spots[id]) : 0
+    const emphasized = id === lead && heat > 0.05
+    const radius = (emphasized ? 8 : 6) + heat * (4 + pulse * 2)
+    const cx = ox + center.x * ow
+    const cy = oy + center.y * oh
+    ctx.beginPath()
+    ctx.arc(cx, cy, radius + 7, 0, Math.PI * 2)
+    ctx.fillStyle =
+      heat > 0.08
+        ? `rgba(226, 54, 72, ${0.16 + heat * 0.34})`
+        : 'rgba(255,255,255,0.16)'
+    ctx.fill()
+    ctx.beginPath()
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+    ctx.fillStyle =
+      heat > 0.08
+        ? `rgba(226, 54, 72, ${0.55 + heat * 0.45})`
+        : 'rgba(255,255,255,0.92)'
+    ctx.fill()
+  }
+  ctx.restore()
 }
 
 function formatTime(sec: number) {
