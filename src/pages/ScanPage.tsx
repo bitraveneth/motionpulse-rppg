@@ -1743,10 +1743,12 @@ export function ScanPage() {
           <div className="scan-session-frame product-frame">
             <div className="scan-desktop-board">
               <DesktopPulseRail
+                result={result}
                 heartBpm={heartBpm}
                 beats={beats}
                 hrv={hrv}
                 respiratory={respiratory}
+                scrub={scrub}
                 liveEstimating={
                   liveEstimating ||
                   (busy && stage === 'estimating_pulse' && Boolean(result))
