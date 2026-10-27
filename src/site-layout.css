@@ -1259,29 +1259,56 @@
 
   @media (min-width: 960px) {
     .scan-desktop-board {
-      grid-template-columns: minmax(0, 28rem) minmax(16rem, 22rem);
+      grid-template-columns: minmax(0, 40rem) minmax(18rem, 22rem);
       justify-content: center;
-      align-items: start;
-      gap: 1.25rem;
+      align-items: stretch;
+      gap: 1.15rem;
+    }
+
+    .scan-desktop-board .phone-scan {
+      order: 1;
+      width: 100%;
+      max-width: none;
+      align-self: stretch;
     }
 
     .desktop-pulse-rail {
+      order: 2;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: 0.7rem;
       min-width: 0;
+      align-self: stretch;
+      height: auto;
       padding: 0;
       border: 0;
       background: transparent;
-      color: inherit;
+      color: #fff;
     }
 
     .premium-card {
-      padding: 0.9rem 0.95rem 1rem;
-      border-radius: 1rem;
-      background: #fff;
-      border: 1px solid rgba(20, 40, 48, 0.08);
-      box-shadow: 0 16px 40px -28px rgba(16, 40, 48, 0.55);
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 0;
+      padding: 0.95rem 1rem 1.05rem;
+      border-radius: 1.05rem;
+      border: 0;
+      color: #fff;
+      box-shadow: 0 16px 36px -26px rgba(16, 40, 48, 0.55);
+    }
+
+    .premium-card-pulse {
+      background: linear-gradient(155deg, #ff4d6d 0%, #ff7a3d 100%);
+    }
+
+    .premium-card-breath {
+      background: linear-gradient(155deg, #1494ff 0%, #14d6a4 100%);
+    }
+
+    .premium-card-graph {
+      background: linear-gradient(155deg, #7a4dff 0%, #e23bd6 100%);
     }
 
     .premium-card-head {
@@ -1290,26 +1317,18 @@
       gap: 0.75rem;
     }
 
-    .premium-icon {
+    .premium-icon,
+    .premium-icon-breath,
+    .premium-icon-wave {
       width: 2.4rem;
       height: 2.4rem;
       border-radius: 999px;
       display: grid;
       place-items: center;
-      background: #e7f7f4;
-      color: #0f9f8f;
+      background: rgba(255, 255, 255, 0.22);
+      color: #fff;
       font-size: 1.05rem;
       flex: 0 0 auto;
-    }
-
-    .premium-icon-breath {
-      background: #e7f3f8;
-      color: #1a7f9a;
-    }
-
-    .premium-icon-wave {
-      background: #eef6f3;
-      color: #14968a;
     }
 
     .premium-kicker {
@@ -1318,7 +1337,7 @@
       font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: #6d7c82;
+      color: rgba(255, 255, 255, 0.82);
     }
 
     .premium-value {
@@ -1334,11 +1353,11 @@
       margin-left: 0.3rem;
       font-size: 0.78rem;
       font-weight: 650;
-      color: #6d7c82;
+      color: rgba(255, 255, 255, 0.82);
     }
 
     .premium-value.is-live {
-      color: #0f9f8f;
+      color: #fff;
     }
 
     .premium-spark {
@@ -1354,15 +1373,15 @@
     .premium-empty {
       margin: 0.4rem 0 0;
       font-size: 0.78rem;
-      color: #5f7278;
+      color: rgba(255, 255, 255, 0.9);
     }
 
     .premium-status {
       display: inline-flex;
       padding: 0.18rem 0.5rem;
       border-radius: 999px;
-      background: #e7f7f4;
-      color: #0c6e64;
+      background: rgba(255, 255, 255, 0.22);
+      color: #fff;
       font-weight: 700;
     }
 
@@ -1438,7 +1457,7 @@
     }
 
     .phone-scan .phone-vitals {
-      /* Desktop already shows pulse on the left rail. */
+      /* Desktop already shows pulse on the side cards. */
       display: none;
     }
   }

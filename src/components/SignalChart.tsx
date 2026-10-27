@@ -10,6 +10,7 @@ type Props = {
   className?: string
   /** Scrub cursor as fraction [0,1] along the time axis. */
   cursorFraction?: number
+  cursorColor?: string
   emptyLabel?: string
 }
 
@@ -30,6 +31,7 @@ export function SignalChart({
   height = 120,
   className = '',
   cursorFraction,
+  cursorColor = 'rgba(14, 107, 106, 0.55)',
   emptyLabel = 'No signal yet',
 }: Props) {
   const w = 400
@@ -66,7 +68,7 @@ export function SignalChart({
             y1={0}
             x2={cursorX}
             y2={h}
-            stroke="rgba(14, 107, 106, 0.55)"
+            stroke={cursorColor}
             strokeWidth={1.5}
             strokeDasharray="4 3"
           />

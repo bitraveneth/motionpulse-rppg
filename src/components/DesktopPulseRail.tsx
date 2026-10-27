@@ -32,7 +32,7 @@ export function DesktopPulseRail({
 
   return (
     <aside className="desktop-pulse-rail" aria-label="Pulse and breath">
-      <article className="premium-card">
+      <article className="premium-card premium-card-pulse">
         <header className="premium-card-head">
           <span className="premium-icon" aria-hidden>
             ♥
@@ -50,7 +50,8 @@ export function DesktopPulseRail({
             <SignalChart
               height={56}
               cursorFraction={scrub}
-              series={[{ values: pulseWave, color: '#0f9f8f', label: 'Pulse' }]}
+              cursorColor="rgba(255,255,255,0.75)"
+              series={[{ values: pulseWave, color: '#ffffff' }]}
             />
           ) : (
             <p className="premium-empty">Waiting for a face</p>
@@ -59,7 +60,7 @@ export function DesktopPulseRail({
         <p className="premium-status">{remark ? remark.badge : 'Signal pending'}</p>
       </article>
 
-      <article className="premium-card">
+      <article className="premium-card premium-card-breath">
         <header className="premium-card-head">
           <span className="premium-icon premium-icon-breath" aria-hidden>
             ≈
@@ -75,7 +76,7 @@ export function DesktopPulseRail({
         <p className="premium-note">{breathNote}</p>
       </article>
 
-      <article className="premium-card">
+      <article className="premium-card premium-card-graph">
         <header className="premium-card-head">
           <span className="premium-icon premium-icon-wave" aria-hidden>
             ～
@@ -92,7 +93,8 @@ export function DesktopPulseRail({
             <SignalChart
               height={96}
               cursorFraction={scrub}
-              series={[{ values: pulseWave, color: '#14968a', label: 'Pulse graph' }]}
+              cursorColor="rgba(255,255,255,0.75)"
+              series={[{ values: pulseWave, color: '#ffffff' }]}
             />
           ) : (
             <p className="premium-empty">The trace fills in as frames arrive.</p>

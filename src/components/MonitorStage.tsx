@@ -133,17 +133,8 @@ export function MonitorStage({
 
     if (!box && !landmarks) return
 
-    if (!box) {
-      drawFaceMarks(ctx, {
-        landmarks,
-        ox,
-        oy,
-        ow,
-        oh,
-        spots,
-        now: glowTick || performance.now(),
-      })
-      return
+    if (box) {
+      drawRoiFrame(ctx, ox + box.x * ow, oy + box.y * oh, box.w * ow, box.h * oh)
     }
 
     drawFaceMarks(ctx, {
@@ -329,6 +320,50 @@ function meshPoint(
   const point = landmarks[index]
   if (!point) return null
   return { x: ox + point.x * ow, y: oy + point.y * oh }
+}
+
+function drawRoiFrame(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  bw: number,
+  bh: number,
+) {
+  const corner = Math.min(36, bw * 0.18, bh * 0.18)
+  ctx.save()
+  ctx.fillStyle = 'rgba(46, 230, 199, 0.14)'
+  ctx.fillRect(x, y, bw, bh)
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)'
+  ctx.lineWidth = 2
+  ctx.strokeRect(x, y, bw, bh)
+  ctx.strokeStyle = '#3dffe0'
+  ctx.lineWidth = 5
+  ctx.lineCap = 'square'
+  ctx.beginPath()
+  ctx.moveTo(x, y + corner)
+  ctx.lineTo(x, y)
+  ctx.lineTo(x + corner, y)
+  ctx.moveTo(x + bw - corner, y)
+  ctx.lineTo(x + bw, y)
+  ctx.lineTo(x + bw, y + corner)
+  ctx.moveTo(x, y + bh - corner)
+  ctx.lineTo(x, y + bh)
+  ctx.lineTo(x + corner, y + bh)
+  ctx.moveTo(x + bw - corner, y + bh)
+  ctx.lineTo(x + bw, y + bh)
+  ctx.lineTo(x + bw, y + bh - corner)
+  ctx.stroke()
+  ctx.font = '700 12px sans-serif'
+  const label = 'ROI'
+  const labelW = ctx.measureText(label).width + 12
+  const labelH = 18
+  const labelX = x
+  const labelY = Math.max(0, y - labelH)
+  ctx.fillStyle = '#3dffe0'
+  ctx.fillRect(labelX, labelY, labelW, labelH)
+  ctx.fillStyle = '#04221c'
+  ctx.fillText(label, labelX + 6, labelY + 13)
+  ctx.restore()
 }
 
 function drawFaceMarks(
