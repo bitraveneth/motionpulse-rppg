@@ -25,9 +25,41 @@ function metric(value: number | null, digits = 1): string {
   return value.toFixed(digits)
 }
 
+function researchRows(detail: LabTestDetail): ResearchRow[] {
+  return detail.subjects.map((row) => ({
+    cameraBpm: row.bpm,
+    plainBpm: row.plainBpm,
+    weightedBpm: row.weightedBpm,
+    referenceBpm: row.referenceBpm,
+    conflict: row.conflict,
+    risk: row.risk,
+  }))
+}
+
+function researchSets(tests: LabTestSummary[], detail: LabTestDetail): DatasetScore[] {
+  const list: DatasetScore[] = []
+  for (const test of tests) {
+    if (list.some((item) => item.name === test.name)) continue
+    list.push(
+      test.id === detail.test.id
+        ? { name: test.name, mae: detail.agreement.mae, count: detail.subjects.length }
+        : { name: test.name, mae: test.mae, count: test.faceCount },
+    )
+  }
+  if (!list.some((item) => item.name === detail.test.name)) {
+    list.unshift({
+      name: detail.test.name,
+      mae: detail.agreement.mae,
+      count: detail.subjects.length,
+    })
+  }
+  return list
+}
+
 export function ResultsPage() {
   const { testId } = useParams()
   const [tests, setTests] = useState<LabTestSummary[]>([])
+  const [listReady, setListReady] = useState(false)
   const [detail, setDetail] = useState<LabTestDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,6 +71,9 @@ export function ResultsPage() {
       })
       .catch(() => {
         if (!cancel) setError('Could not load test results.')
+      })
+      .finally(() => {
+        if (!cancel) setListReady(true)
       })
     return () => {
       cancel = true
@@ -76,7 +111,9 @@ export function ResultsPage() {
             videos stay on the machine that ran them.
           </p>
         </header>
-        {tests.length > 0 ? (
+        {!listReady ? (
+          <p className="rq-wait">Opening saved tests…</p>
+        ) : tests.length > 0 ? (
           <section className="result-summary" aria-label="Summary of saved tests">
             <h2>Summary</h2>
             <p className="lab-status">
@@ -112,12 +149,27 @@ export function ResultsPage() {
             </table>
           </section>
         ) : null}
+        <section className="result-questions" aria-label="Research questions">
+          <h2>Research questions</h2>
+          {detail ? (
+            <>
+              <p className="lab-status">
+                RQ1 to RQ3 use {detail.test.name}. RQ4 compares every saved test.
+              </p>
+              <ResearchQuestions rows={researchRows(detail)} datasets={researchSets(tests, detail)} />
+            </>
+          ) : !listReady || selected ? (
+            <p className="rq-wait">Opening the research answers…</p>
+          ) : (
+            <p className="rq-wait">The four answers appear when a saved test is in the database.</p>
+          )}
+        </section>
         {error ? (
           <p className="lab-error" role="alert">
             {error}
           </p>
         ) : null}
-        {tests.length === 0 && !error ? (
+        {listReady && tests.length === 0 && !error ? (
           <p className="rq-wait">No saved test yet. Run a dataset in the local lab and the cards appear here.</p>
         ) : (
           <div className="result-layout">
@@ -138,37 +190,6 @@ export function ResultsPage() {
                   <span className="result-when"> {formatTestWhen(detail.test.createdAt)}</span>
                 </h2>
                 <AgreementMetrics summary={detail.agreement} />
-                <ResearchQuestions
-                  rows={detail.subjects.map(
-                    (row): ResearchRow => ({
-                      cameraBpm: row.bpm,
-                      plainBpm: row.plainBpm,
-                      weightedBpm: row.weightedBpm,
-                      referenceBpm: row.referenceBpm,
-                      conflict: row.conflict,
-                      risk: row.risk,
-                    }),
-                  )}
-                  datasets={(() => {
-                    const list: DatasetScore[] = []
-                    for (const test of tests) {
-                      if (list.some((item) => item.name === test.name)) continue
-                      list.push(
-                        test.id === detail.test.id
-                          ? { name: test.name, mae: detail.agreement.mae, count: detail.subjects.length }
-                          : { name: test.name, mae: test.mae, count: test.faceCount },
-                      )
-                    }
-                    if (!list.some((item) => item.name === detail.test.name)) {
-                      list.unshift({
-                        name: detail.test.name,
-                        mae: detail.agreement.mae,
-                        count: detail.subjects.length,
-                      })
-                    }
-                    return list
-                  })()}
-                />
                 <div className="result-grid">
                   {detail.subjects.map((row) => (
                     <SubjectResultCard key={row.id} row={row} />

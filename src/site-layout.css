@@ -2300,6 +2300,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+.result-questions {
+  margin-top: 1.25rem;
+}
+
+.result-questions > h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 560;
+}
+
 .result-layout {
   display: grid;
   gap: 1rem;
