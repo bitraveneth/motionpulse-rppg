@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useContent } from '../lib/content'
 import { isLabPath, LAB_DESTINATIONS } from '../lib/lab/destinations'
-import { isLocalLabEnabled } from '../lib/lab/enabled'
 type Props = {
   /** Primary pill CTA. Pass null to hide it. */
   primaryCta?: { label: string; to: string } | null
@@ -15,7 +14,6 @@ export function SiteNav({ primaryCta }: Props) {
   const { pathname } = useLocation()
   const c = useContent()
   const maintenance = c('site.maintenance_note', '').trim()
-  const showLab = isLocalLabEnabled()
   const labOn = isLabPath(pathname)
 
   useEffect(() => {
@@ -93,43 +91,30 @@ export function SiteNav({ primaryCta }: Props) {
                 </NavLink>
               </li>
             ))}
-            {showLab ? null : (
-              <li>
-                <NavLink
-                  to="/results"
-                  className={({ isActive }) => (isActive ? 'is-on' : undefined)}
-                  onClick={close}
-                >
-                  Test results
-                </NavLink>
-              </li>
-            )}
-            {showLab ? (
-              <li className={`site-nav-lab ${labOn ? 'is-on' : ''} ${labOpen ? 'is-open' : ''}`} ref={labRef}>
-                <button
-                  type="button"
-                  className="site-nav-lab-toggle"
-                  aria-expanded={labOpen}
-                  aria-controls="site-nav-lab-menu"
-                  onClick={() => setLabOpen((value) => !value)}
-                >
-                  Lab
-                </button>
-                <ul id="site-nav-lab-menu" className="site-nav-lab-menu">
-                  {LAB_DESTINATIONS.map((tab) => (
-                    <li key={tab.to}>
-                      <NavLink
-                        to={tab.to}
-                        className={({ isActive }) => (isActive ? 'is-on' : undefined)}
-                        onClick={close}
-                      >
-                        {tab.label}
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </li>
-            ) : null}
+            <li className={`site-nav-lab ${labOn ? 'is-on' : ''} ${labOpen ? 'is-open' : ''}`} ref={labRef}>
+              <button
+                type="button"
+                className="site-nav-lab-toggle"
+                aria-expanded={labOpen}
+                aria-controls="site-nav-lab-menu"
+                onClick={() => setLabOpen((value) => !value)}
+              >
+                Lab
+              </button>
+              <ul id="site-nav-lab-menu" className="site-nav-lab-menu">
+                {LAB_DESTINATIONS.map((tab) => (
+                  <li key={tab.to}>
+                    <NavLink
+                      to={tab.to}
+                      className={({ isActive }) => (isActive ? 'is-on' : undefined)}
+                      onClick={close}
+                    >
+                      {tab.label}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </li>
             {links.slice(2).map((l) => (
               <li key={l.label}>
                 <NavLink

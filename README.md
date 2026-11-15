@@ -81,7 +81,7 @@ Optionally create a public-read Storage bucket named `thumbs` for ~128–192px J
 
 ## Local lab (in-app + CLI)
 
-The **Local lab** nav item appears when running `npm run dev`, or when `VITE_ENABLE_LOCAL_LAB=true`. It is **gated** so casual public deploys do not nudge visitors toward multi‑GB dataset downloads.
+The **Lab** menu is on the live site as well as on this Mac. Choosing a dataset folder, running a video, and training PhysNet still use this machine. The live site shows the same screens and the saved results.
 
 In Local lab you can:
 

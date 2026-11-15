@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { LabTabs } from '../components/LabTabs'
 import { SiteNav } from '../components/SiteNav'
-import { isLocalLabEnabled } from '../lib/lab/enabled'
 
 type TrainStatus = {
   state: 'idle' | 'running' | 'done' | 'error' | 'stopped'
@@ -48,7 +47,6 @@ function lineClass(line: string): string {
 }
 
 export function TrainPage() {
-  const enabled = isLocalLabEnabled()
   const [status, setStatus] = useState<TrainStatus>(EMPTY)
   const [path, setPath] = useState('')
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -149,8 +147,7 @@ export function TrainPage() {
             CHROM and POS stay on Local lab. They do not need this step.
           </p>
         </header>
-        {enabled ? (
-          <div className="lab-sheet">
+        <div className="lab-sheet">
             <section className="lab-block" aria-labelledby="train-title">
               <h2 id="train-title">Dataset</h2>
               <div className="train-actions">
@@ -261,10 +258,7 @@ export function TrainPage() {
                 </li>
               </ul>
             </section>
-          </div>
-        ) : (
-          <p className="rq-wait">This lab is off in this build. Set VITE_ENABLE_LOCAL_LAB to train on a local folder.</p>
-        )}
+        </div>
       </main>
     </>
   )
