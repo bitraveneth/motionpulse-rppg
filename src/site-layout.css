@@ -2251,6 +2251,55 @@
   pointer-events: none;
 }
 
+.result-summary {
+  margin-top: 1.25rem;
+  padding: 1.1rem 1.15rem 1.2rem;
+  background: #fff;
+  border: 1px solid var(--site-line);
+  border-radius: 1.15rem;
+  overflow-x: auto;
+}
+
+.result-summary h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 560;
+}
+
+.result-summary table {
+  width: 100%;
+  min-width: 36rem;
+  margin-top: 0.7rem;
+  border-collapse: collapse;
+  font-size: 1rem;
+}
+
+.result-summary th,
+.result-summary td {
+  padding: 0.55rem 0.45rem;
+  text-align: left;
+  border-bottom: 1px solid var(--site-line);
+}
+
+.result-summary th {
+  color: var(--site-ink-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.result-summary a {
+  color: var(--site-ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.result-summary td:nth-child(n + 2),
+.result-summary th:nth-child(n + 2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .result-layout {
   display: grid;
   gap: 1rem;

@@ -20,6 +20,11 @@ function oneLine(test: LabTestSummary): string {
   return `${test.name} · ${count} · ${mae}`
 }
 
+function metric(value: number | null, digits = 1): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  return value.toFixed(digits)
+}
+
 export function ResultsPage() {
   const { testId } = useParams()
   const [tests, setTests] = useState<LabTestSummary[]>([])
@@ -66,11 +71,47 @@ export function ResultsPage() {
           <LabTabs />
           <h1>Saved dataset runs</h1>
           <p className="lab-status">
-            Each card is one subject. The same card is on the feed, with its face still.{' '}
-            <Link to="/feed">Open the feed</Link>. The time is Asia/Shanghai. Videos stay on the
-            machine that ran them.
+            These rows are already in the database. Each card is one subject, and the same card is
+            on the feed. <Link to="/feed">Open the feed</Link>. The time is Asia/Shanghai. The
+            videos stay on the machine that ran them.
           </p>
         </header>
+        {tests.length > 0 ? (
+          <section className="result-summary" aria-label="Summary of saved tests">
+            <h2>Summary</h2>
+            <p className="lab-status">
+              {tests.length} saved test{tests.length === 1 ? '' : 's'}
+              {' · '}
+              {tests.reduce((sum, test) => sum + test.faceCount, 0)} subjects
+              {' · '}
+              {tests.reduce((sum, test) => sum + test.paired, 0)} with a file heart rate
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Test</th>
+                  <th>Subjects</th>
+                  <th>MAE</th>
+                  <th>RMSE</th>
+                  <th>Pearson r</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tests.map((test) => (
+                  <tr key={test.id}>
+                    <td>
+                      <Link to={`/results/${test.id}`}>{test.name}</Link>
+                    </td>
+                    <td>{test.faceCount}</td>
+                    <td>{metric(test.mae)}</td>
+                    <td>{metric(test.rmse)}</td>
+                    <td>{metric(test.pearson, 2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ) : null}
         {error ? (
           <p className="lab-error" role="alert">
             {error}

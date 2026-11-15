@@ -93,6 +93,17 @@ export function SiteNav({ primaryCta }: Props) {
                 </NavLink>
               </li>
             ))}
+            {showLab ? null : (
+              <li>
+                <NavLink
+                  to="/results"
+                  className={({ isActive }) => (isActive ? 'is-on' : undefined)}
+                  onClick={close}
+                >
+                  Test results
+                </NavLink>
+              </li>
+            )}
             {showLab ? (
               <li className={`site-nav-lab ${labOn ? 'is-on' : ''} ${labOpen ? 'is-open' : ''}`} ref={labRef}>
                 <button
