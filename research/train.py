@@ -33,6 +33,10 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--device", default=None)
+    p.add_argument("--data-root", default=None)
+    p.add_argument("--dataset", default=None)
+    p.add_argument("--max-windows", type=int, default=None)
+    p.add_argument("--max-subjects", type=int, default=None)
     return p.parse_args()
 
 
@@ -73,11 +77,23 @@ def _batch_conflict(
 def main() -> int:
     args = parse_args()
     cfg = load_config(args.config)
+    if args.data_root:
+        cfg["data_root"] = args.data_root
+    if args.dataset:
+        cfg["dataset"] = args.dataset
+    if args.max_windows is not None:
+        cfg["max_train_windows"] = args.max_windows
+    if args.max_subjects is not None:
+        cfg["max_subjects"] = args.max_subjects
     out_dir = resolve_out_dir(cfg)
     device = torch.device(args.device or cfg.get("device", "cpu"))
     epochs = int(args.epochs if args.epochs is not None else cfg.get("epochs", 2))
 
-    train_ds = get_dataset(cfg, split="train")
+    try:
+        train_ds = get_dataset(cfg, split="train")
+    except (FileNotFoundError, NotImplementedError, RuntimeError, ValueError) as exc:
+        print(str(exc))
+        return 1
     loader = DataLoader(
         train_ds,
         batch_size=int(cfg.get("batch_size", 4)),

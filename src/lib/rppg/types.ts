@@ -27,6 +27,9 @@ export type RoiRgbTrace = Record<RoiId, RgbSample[]>
 
 export type CandidateMethod = 'CHROM' | 'POS'
 
+/** The pulse methods this build can run. CHROM is the de Haan method. POS is Wang et al. */
+export const CANDIDATE_METHODS: CandidateMethod[] = ['CHROM', 'POS']
+
 export type ConflictScores = {
   cTemp: number
   cSpec: number

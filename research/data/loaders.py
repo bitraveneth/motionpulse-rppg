@@ -79,23 +79,43 @@ def get_dataset(cfg: dict[str, Any], split: str = "train"):
             max_windows=int(max_windows) if max_windows is not None else None,
         )
 
-    # Stubs for real datasets — fail clearly until user supplies files
-    expected_map = {
-        "ubfc": data_root / "UBFC",
-        "pure": data_root / "PURE",
-        "mmpd": data_root / "MMPD",
-    }
-    if name not in expected_map:
-        raise ValueError(
-            f"Unknown dataset '{name}'. Use synthetic|scamps|ubfc|pure|mmpd."
+    if name == "mmpd":
+        expected = data_root / "MMPD"
+        if not expected.exists():
+            raise FileNotFoundError(missing_dataset_message(name, expected))
+        raise NotImplementedError(
+            f"MMPD files were found at {expected}, and that loader is not written yet."
         )
 
-    expected = expected_map[name]
+    if name not in ("ubfc", "pure", "folder", "local"):
+        raise ValueError(
+            f"Unknown dataset '{name}'. Use synthetic|scamps|ubfc|pure|folder|mmpd."
+        )
+
+    from research.data.facevideo import FaceVideoDataset
+
+    if name == "folder" or name == "local":
+        expected = data_root
+    else:
+        nested = data_root / name.upper()
+        expected = nested if nested.is_dir() else data_root
     if not expected.exists():
         raise FileNotFoundError(missing_dataset_message(name, expected))
-
-    raise NotImplementedError(
-        f"Loader for '{name}' is stubbed. Files found at {expected}, but "
-        f"subject-independent windowing is not wired yet. "
-        f"Use synthetic or scamps for smoke tests; extend research/data/loaders.py next."
+    max_key = {
+        "train": "max_train_windows",
+        "val": "max_val_windows",
+        "test": "max_test_windows",
+    }.get(split, "max_train_windows")
+    max_windows = cfg.get(max_key, cfg.get("max_train_windows"))
+    raw_subjects = cfg.get("max_subjects")
+    max_subjects = int(raw_subjects) if raw_subjects else None
+    return FaceVideoDataset(
+        root=expected,
+        split=split,
+        frames=frames,
+        height=height,
+        width=width,
+        stride=int(cfg["stride"]) if cfg.get("stride") else None,
+        max_windows=int(max_windows) if max_windows else None,
+        max_subjects=max_subjects,
     )

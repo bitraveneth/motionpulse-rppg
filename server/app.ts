@@ -11,6 +11,7 @@ import { parseFeedDetail } from '../src/lib/feed/detail'
 import { MAX_FEED_POSTS, parseFeedPost } from './feedPost'
 import { toPhoneMp4 } from './transcodeVideo'
 import { videoByteResponse } from './videoRange'
+import { registerLabTests } from './labTests'
 import { hashPassword, randomPassword, verifyPassword } from './password'
 
 export const app = new Hono<{ Variables: { account: SessionAccount } }>()
@@ -54,6 +55,7 @@ function clipData(raw: unknown, index: number) {
     respiratoryRate: num(input.respiratoryRate),
     signalLabel: str(input.signalLabel, 80),
     risk: str(input.risk, 40),
+    conflictScore: num(input.conflictScore),
     regionWeights: numList(input.regionWeights, 4),
     waveform: numList(input.waveform, 400),
     thumb: thumb && thumb.startsWith('data:image') ? thumb : null,
@@ -213,6 +215,9 @@ const feedListSelect = {
   source: true,
   thumb: true,
   hasVideo: true,
+  datasetName: true,
+  referenceBpm: true,
+  method: true,
   videoMime: true,
   hidden: true,
   videoHidden: true,
@@ -232,6 +237,9 @@ function feedJson(post: {
   thumb: string | null
   hasVideo: boolean
   videoMime: string | null
+  datasetName: string | null
+  referenceBpm: number | null
+  method: string | null
   hidden: boolean
   videoHidden: boolean
   detail: unknown
@@ -247,7 +255,7 @@ app.get('/api/feed', async (c) => {
   const posts = await prisma.feedPost.findMany({
     where: { hidden: false },
     orderBy: { createdAt: 'desc' },
-    take: 200,
+    take: 400,
     select: feedListSelect,
   })
   return c.json({
@@ -384,6 +392,8 @@ app.get('/api/me/sessions', async (c) => {
   })
   return c.json({ sessions })
 })
+
+registerLabTests(app)
 
 // ---------- admin ----------
 

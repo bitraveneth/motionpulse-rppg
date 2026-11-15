@@ -1,18 +1,10 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HomeHeroVisual } from '../components/HomeHeroVisual'
-import { LocalLab } from '../components/LocalLab'
 import { SiteNav } from '../components/SiteNav'
-import {
-  HowItWorksSection,
-  VitalsExplainerSection,
-} from '../components/SiteSections'
-import { isLocalLabEnabled } from '../lib/lab/enabled'
+import { VitalsExplainerSection } from '../components/SiteSections'
 import { useContent } from '../lib/content'
 
 export function HomePage() {
-  const labEnabled = isLocalLabEnabled()
-  const [, setFeedTick] = useState(0)
   const c = useContent()
 
   return (
@@ -38,52 +30,13 @@ export function HomePage() {
           </div>
         </section>
 
-        <HowItWorksSection />
         <VitalsExplainerSection />
 
-        <section
-          id="demo-tools"
-          className="site-section home-section"
-          aria-labelledby="demo-tools-title"
-        >
-          <div className="site-section-inner">
-            <h2 id="demo-tools-title">{c('home.demo.title')}</h2>
-            <div className="home-lab-grid">
-              <article className="home-card">
-                <h3 className="home-card-heading">Demo</h3>
-                <p className="home-card-body">
-                  Upload a face clip or queue several videos on the scan page.
-                  Analysis runs locally; nothing is sent to a server by default.
-                </p>
-                <Link to="/scan?action=upload" className="home-card-link">
-                  Open scan to upload
-                </Link>
-              </article>
-              <article className="home-card" id="local-lab">
-                <h3 className="home-card-heading">Local lab</h3>
-                <p className="home-card-body">
-                  Batch datasets on this machine when the lab is enabled. Only
-                  metric summaries are shared if you publish cards — not raw
-                  video.
-                </p>
-                {labEnabled ? (
-                  <a href="#local-lab-panel" className="home-card-link">
-                    Jump to local lab
-                  </a>
-                ) : (
-                  <span className="home-card-muted">
-                    Enable with VITE_ENABLE_LOCAL_LAB in production builds.
-                  </span>
-                )}
-              </article>
-            </div>
-            {labEnabled ? (
-              <div id="local-lab-panel" className="home-lab-panel">
-                <LocalLab onPublished={() => setFeedTick((t) => t + 1)} />
-              </div>
-            ) : null}
-          </div>
-        </section>
+        <p className="home-demo-note" id="demo-tools">
+          A demo clip is an upload on the{' '}
+          <Link to="/scan?action=upload">scan page</Link>. The video stays on
+          this device.
+        </p>
       </main>
 
       <footer className="site-foot">

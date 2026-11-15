@@ -1,8 +1,8 @@
 import { parseFeedDetail, type FeedDetail } from '../src/lib/feed/detail'
 import { MAX_FEED_VIDEO_BYTES } from '../src/lib/feed/limits'
 
-/** How many public posts to keep. Older ones are dropped. */
-export const MAX_FEED_POSTS = 60
+/** How many public posts to keep. Older ones are dropped. Dataset runs need room for every subject. */
+export const MAX_FEED_POSTS = 400
 
 export { MAX_FEED_VIDEO_BYTES }
 

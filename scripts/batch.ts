@@ -23,6 +23,7 @@ import {
 } from 'node:fs'
 import { basename, extname, join, relative, resolve } from 'node:path'
 import { conflictRiskLabel } from '../src/lib/rppg/conflict.ts'
+import { spectralSnr } from '../src/lib/rppg/dsp.ts'
 import { runPipeline } from '../src/lib/rppg/pipeline.ts'
 import { generateSyntheticSample } from '../src/lib/rppg/synthetic.ts'
 import {
@@ -46,6 +47,8 @@ type BatchRow = {
   roi_weights: Record<string, number>
   sample_rate_hz: number
   frames: number
+  reference_bpm: number | null
+  snr: number
 }
 
 function walkVideos(root: string): string[] {
@@ -133,19 +136,34 @@ function subjectFromPath(videoPath: string, root: string): string {
   return parts[0] || basename(videoPath)
 }
 
+function referenceFromCompanion(path: string): number | null {
+  try {
+    const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    for (const key of ['reference_bpm', 'referenceBpm', 'ground_truth_bpm', 'gt_bpm']) {
+      const value = Number(raw[key])
+      if (Number.isFinite(value)) return value
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
 function analyzeVideo(videoPath: string, root: string): BatchRow {
   const companion = findCompanionJson(videoPath)
   let frames: FrameLandmarks[]
   let roiRgb: RoiRgbTrace
   let sampleRateHz: number
   let analysis: BatchRow['analysis']
+  let referenceBpm: number | null = null
 
   const loaded = companion ? loadCompanion(companion) : null
-  if (loaded) {
+  if (loaded && companion) {
     frames = loaded.frames
     roiRgb = loaded.roiRgb
     sampleRateHz = loaded.sampleRateHz
     analysis = 'companion_json'
+    referenceBpm = referenceFromCompanion(companion)
   } else {
     const seed = hashSeed(videoPath)
     const pulseBpm = 55 + (seed % 45)
@@ -161,6 +179,7 @@ function analyzeVideo(videoPath: string, root: string): BatchRow {
     roiRgb = sample.roiRgb
     sampleRateHz = sample.sampleRateHz
     analysis = 'synthetic_proxy'
+    referenceBpm = pulseBpm
   }
 
   const result = runPipeline({
@@ -169,6 +188,8 @@ function analyzeVideo(videoPath: string, root: string): BatchRow {
     sampleRateHz,
     controls: DEFAULT_CONTROLS,
   })
+  const [fLo, fHi] = DEFAULT_CONTROLS.physBandHz
+  const snr = Number(spectralSnr(result.spectra.gated, fLo, fHi).toFixed(3))
   const risk = conflictRiskLabel(result.conflict.combined)
   const roi_weights: Record<string, number> = {}
   for (const id of ROI_IDS) {
@@ -187,6 +208,8 @@ function analyzeVideo(videoPath: string, root: string): BatchRow {
     roi_weights,
     sample_rate_hz: sampleRateHz,
     frames: frames.length,
+    reference_bpm: referenceBpm,
+    snr,
   }
 }
 
@@ -204,6 +227,8 @@ function toCsv(rows: BatchRow[]): string {
     'roi_rightCheek',
     'roi_lowerFace',
     'frames',
+    'reference_bpm',
+    'snr',
   ]
   const lines = [header.join(',')]
   for (const r of rows) {
@@ -221,6 +246,8 @@ function toCsv(rows: BatchRow[]): string {
         r.roi_weights.rightCheek ?? '',
         r.roi_weights.lowerFace ?? '',
         r.frames,
+        r.reference_bpm ?? '',
+        r.snr,
       ].join(','),
     )
   }

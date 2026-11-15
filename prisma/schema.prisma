@@ -83,6 +83,8 @@ model Clip {
   respiratoryRate  Float? // experimental
   signalLabel      String?
   risk             String?
+  /// Motion–pulse conflict at save time. Null on clips saved before this field.
+  conflictScore    Float?
   regionWeights    Float[] // forehead, left cheek, right cheek, lower face
   waveform         Float[] // short downsampled pulse trace
   thumb            String? // optional tiny data-url crop, never raw video
@@ -106,6 +108,12 @@ model FeedPost {
   videoMime       String?
   videoBytes      Bytes?
   hasVideo        Boolean  @default(false)
+  /// Dataset subject this card came from. Null on older webcam posts.
+  labSubjectId    String?  @unique
+  datasetName     String?
+  referenceBpm    Float?
+  /// CHROM or POS. Null on posts from before the method was stored.
+  method          String?
   /// Hidden posts stay in the database and drop off the public feed.
   hidden          Boolean  @default(false)
   /// The post can stay public while the face video stays off the feed.
@@ -115,6 +123,58 @@ model FeedPost {
   detail          Json?
 
   @@index([createdAt])
+}
+
+// One Start on a dataset. Numbers only — the videos stay on disk.
+model LabTest {
+  id        String       @id @default(cuid())
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  name      String
+  clipCount Int          @default(0)
+  faceCount Int          @default(0)
+  paired    Int          @default(0)
+  mae       Float?
+  rmse      Float?
+  pearson   Float?
+  snrMean   Float?
+  snrDb     Float?
+  bias      Float?
+  loaLow    Float?
+  loaHigh   Float?
+  subjects  LabSubject[]
+
+  @@index([createdAt])
+}
+
+model LabSubject {
+  id              String   @id @default(cuid())
+  testId          String
+  test            LabTest  @relation(fields: [testId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  subject         String
+  bpm             Float
+  /// Equal-weight heart rate before motion suppression.
+  plainBpm        Float?
+  /// Heart rate after trust-weighting the four face regions.
+  weightedBpm     Float?
+  referenceBpm    Float?
+  snr             Float?
+  durationSec     Float
+  respiratoryRate Float?
+  breathsInClip   Float?
+  risk            String
+  conflict        Float
+  windows         Int
+  frames          Int
+  /// CHROM or POS. Older rows were CHROM.
+  method          String   @default("CHROM")
+  /// Face still from the clip. Same size cap as a feed thumb. The video stays on disk.
+  thumb           String?
+  /// Motion, spectrum, and trust. Same shape as a feed card, without a video.
+  detail          Json
+
+  @@index([testId])
 }
 
 model GroundTruth {

@@ -7,6 +7,7 @@ import {
 import {
   reliabilityFromConflict,
   reliabilityFromRisk,
+  signalFace,
 } from './reliability'
 
 describe('buildSparklinePath', () => {
@@ -91,6 +92,17 @@ describe('reliability remarks', () => {
     expect(reliabilityFromRisk('moderate').badge).toBe('Mixed')
     expect(reliabilityFromRisk('elevated').badge).toBe('Unreliable')
     expect(reliabilityFromRisk('high').badge).toBe('Unreliable')
+  })
+
+  it('puts the reason on one chip instead of a raw risk word', () => {
+    expect(signalFace('high')).toMatchObject({
+      badge: 'Unreliable',
+      hint: 'Motion covers the pulse',
+      level: 'high',
+    })
+    expect(signalFace('elevated').hint).toBe('Motion in the band')
+    expect(signalFace('low').badge).toBe('Stable')
+    expect(signalFace('nope').badge).toBe('Unknown')
   })
 
   it('uses signal-quality copy, not health grades', () => {

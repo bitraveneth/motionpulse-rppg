@@ -17,6 +17,12 @@ export type BatchResultRow = {
   roi_weights: RoiWeightsSummary
   sample_rate_hz?: number
   frames?: number
+  /** Dataset or device heart rate, when the file or a later label has one. */
+  referenceBpm?: number | null
+  /** Pulse-band peak power divided by the other pulse-band bins. */
+  snr?: number | null
+  /** CHROM or POS. Absent on older summary files, which were CHROM. */
+  method?: string
   sparkline?: string | null
   thumbnail_data?: string | null
   thumbnail_url?: string | null
@@ -31,6 +37,12 @@ export type BatchResultsFile = {
   note?: string
   privacy?: string
   results: BatchResultRow[]
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (value == null || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
 }
 
 export function parseBatchResultsJson(raw: unknown): BatchResultsFile {
@@ -66,6 +78,13 @@ export function parseBatchResultsJson(raw: unknown): BatchResultsFile {
       sample_rate_hz:
         row.sample_rate_hz != null ? Number(row.sample_rate_hz) : undefined,
       frames: row.frames != null ? Number(row.frames) : undefined,
+      referenceBpm: optionalNumber(
+        row.referenceBpm ??
+          row.reference_bpm ??
+          row.ground_truth_bpm ??
+          row.gt_bpm,
+      ),
+      snr: optionalNumber(row.snr ?? row.pulse_snr),
       sparkline: (row.sparkline as string | null) ?? null,
       thumbnail_data: (row.thumbnail_data as string | null) ?? null,
       thumbnail_url: (row.thumbnail_url as string | null) ?? null,

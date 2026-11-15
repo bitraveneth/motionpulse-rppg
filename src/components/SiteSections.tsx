@@ -2,35 +2,6 @@
 
 import { useContent } from '../lib/content'
 
-export function HowItWorksSection() {
-  const c = useContent()
-  return (
-    <section
-      id="how-it-works"
-      className="site-section home-section"
-      aria-labelledby="how-it-works-title"
-    >
-      <div className="site-section-inner">
-        <h2 id="how-it-works-title">{c('home.how.title')}</h2>
-        <ol className="home-steps">
-          <li className="home-card">
-            <h3>{c('home.how.step1.heading')}</h3>
-            <p>{c('home.how.step1.body')}</p>
-          </li>
-          <li className="home-card">
-            <h3>{c('home.how.step2.heading')}</h3>
-            <p>{c('home.how.step2.body')}</p>
-          </li>
-          <li className="home-card">
-            <h3>{c('home.how.step3.heading')}</h3>
-            <p>{c('home.how.step3.body')}</p>
-          </li>
-        </ol>
-      </div>
-    </section>
-  )
-}
-
 export function VitalsExplainerSection() {
   const c = useContent()
   return (

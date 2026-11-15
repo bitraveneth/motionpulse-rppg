@@ -1,4 +1,4 @@
-# Stub — activate when UBFC is under data/UBFC (gitignored).
+# Reads data/UBFC when that folder is on this machine. The Lab Train page can point elsewhere.
 dataset: ubfc
 data_root: data
 out_dir: research/out

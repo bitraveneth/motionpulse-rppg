@@ -16,41 +16,51 @@ const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 
 let landmarkerPromise: Promise<FaceLandmarker> | null = null
+let preferCpu = false
+
+function createLandmarker(delegate: 'GPU' | 'CPU'): Promise<FaceLandmarker> {
+  return (async () => {
+    const vision = await FilesetResolver.forVisionTasks(WASM_CDN)
+    return FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: MODEL_URL,
+        delegate,
+      },
+      runningMode: 'VIDEO',
+      numFaces: 1,
+      outputFaceBlendshapes: false,
+      outputFacialTransformationMatrixes: false,
+    })
+  })()
+}
 
 export function getFaceLandmarker(): Promise<FaceLandmarker> {
   if (!landmarkerPromise) {
-    landmarkerPromise = (async () => {
-      const vision = await FilesetResolver.forVisionTasks(WASM_CDN)
-      return FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: MODEL_URL,
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        numFaces: 1,
-        outputFaceBlendshapes: false,
-        outputFacialTransformationMatrixes: false,
-      })
-    })().catch(async (err) => {
-      // Retry CPU if GPU fails
-      landmarkerPromise = null
-      const vision = await FilesetResolver.forVisionTasks(WASM_CDN)
-      const lm = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: MODEL_URL,
-          delegate: 'CPU',
-        },
-        runningMode: 'VIDEO',
-        numFaces: 1,
-      })
+    landmarkerPromise = createLandmarker(preferCpu ? 'CPU' : 'GPU').catch(async () => {
+      preferCpu = true
+      const lm = await createLandmarker('CPU')
       landmarkerPromise = Promise.resolve(lm)
-      if (err) {
-        // CPU path succeeded after GPU failure
-      }
       return lm
     })
   }
   return landmarkerPromise
+}
+
+/** One frame. If the GPU delegate dies on the first detect, the rest of the clip uses CPU. */
+export async function landmarksForVideo(
+  video: HTMLVideoElement | HTMLCanvasElement,
+  timestampMs: number,
+): Promise<FrameLandmarks | null> {
+  const lm = await getFaceLandmarker()
+  try {
+    return resultToLandmarks(lm.detectForVideo(video, timestampMs))
+  } catch (error) {
+    if (preferCpu) throw error
+    preferCpu = true
+    landmarkerPromise = createLandmarker('CPU')
+    const cpu = await landmarkerPromise
+    return resultToLandmarks(cpu.detectForVideo(video, timestampMs))
+  }
 }
 
 export function resultToLandmarks(
@@ -74,9 +84,7 @@ export async function detectVideoFrame(
   video: HTMLVideoElement,
   timestampMs: number,
 ): Promise<FrameLandmarks | null> {
-  const lm = await getFaceLandmarker()
-  const result = lm.detectForVideo(video, timestampMs)
-  return resultToLandmarks(result)
+  return landmarksForVideo(video, timestampMs)
 }
 
 /** Sample landmarks across a video at ~targetFps (offline-ish scrub). */
@@ -91,14 +99,12 @@ export async function sampleVideoLandmarks(
   }
   const step = 1 / targetFps
   const frames: DetectedFrame[] = []
-  const lm = await getFaceLandmarker()
 
   for (let t = 0; t < duration; t += step) {
     video.currentTime = t
     await waitSeeked(video)
     const ts = Math.round(t * 1000)
-    const result = lm.detectForVideo(video, ts)
-    const landmarks = resultToLandmarks(result)
+    const landmarks = await landmarksForVideo(video, ts)
     if (landmarks) {
       frames.push({ landmarks, timestampMs: ts })
     }

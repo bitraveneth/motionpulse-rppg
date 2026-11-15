@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useContent } from '../lib/content'
+import { isLabPath, LAB_DESTINATIONS } from '../lib/lab/destinations'
+import { isLocalLabEnabled } from '../lib/lab/enabled'
 type Props = {
   /** Primary pill CTA. Pass null to hide it. */
   primaryCta?: { label: string; to: string } | null
@@ -8,34 +10,48 @@ type Props = {
 
 export function SiteNav({ primaryCta }: Props) {
   const [open, setOpen] = useState(false)
-  const location = useLocation()
-  const onHome = location.pathname === '/'
+  const [labOpen, setLabOpen] = useState(false)
+  const labRef = useRef<HTMLLIElement>(null)
+  const { pathname } = useLocation()
   const c = useContent()
   const maintenance = c('site.maintenance_note', '').trim()
+  const showLab = isLocalLabEnabled()
+  const labOn = isLabPath(pathname)
 
   useEffect(() => {
-    if (!open) return
+    setOpen(false)
+    setLabOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!open && !labOpen) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') {
+        setOpen(false)
+        setLabOpen(false)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, labOpen])
+
+  useEffect(() => {
+    if (!labOpen) return
+    const onPointer = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return
+      if (!labRef.current?.contains(event.target)) setLabOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointer)
+    return () => window.removeEventListener('pointerdown', onPointer)
+  }, [labOpen])
 
   function close() {
     setOpen(false)
   }
 
-  function sectionHref(id: string) {
-    return onHome ? `#${id}` : `/#${id}`
-  }
-
   const links = [
     { to: '/scan', label: c('nav.scan') },
     { to: '/feed', label: c('nav.feed') },
-    { to: sectionHref('how-it-works'), label: c('nav.how') },
-    { to: sectionHref('demo-tools'), label: c('nav.demo') },
-    { to: sectionHref('local-lab'), label: c('nav.lab') },
     { to: '/signin', label: c('nav.signin') },
   ]
 
@@ -66,13 +82,52 @@ export function SiteNav({ primaryCta }: Props) {
           className={`site-nav-panel ${open ? 'is-open' : ''}`}
         >
           <ul className="site-nav-links">
-            {links.map((l) => (
+            {links.slice(0, 2).map((l) => (
               <li key={l.label}>
-                {l.to.startsWith('/') && !l.to.startsWith('/#') ? (
-                  <Link to={l.to} onClick={close}>{l.label}</Link>
-                ) : (
-                  <a href={l.to} onClick={close}>{l.label}</a>
-                )}
+                <NavLink
+                  to={l.to}
+                  className={({ isActive }) => (isActive ? 'is-on' : undefined)}
+                  onClick={close}
+                >
+                  {l.label}
+                </NavLink>
+              </li>
+            ))}
+            {showLab ? (
+              <li className={`site-nav-lab ${labOn ? 'is-on' : ''} ${labOpen ? 'is-open' : ''}`} ref={labRef}>
+                <button
+                  type="button"
+                  className="site-nav-lab-toggle"
+                  aria-expanded={labOpen}
+                  aria-controls="site-nav-lab-menu"
+                  onClick={() => setLabOpen((value) => !value)}
+                >
+                  Lab
+                </button>
+                <ul id="site-nav-lab-menu" className="site-nav-lab-menu">
+                  {LAB_DESTINATIONS.map((tab) => (
+                    <li key={tab.to}>
+                      <NavLink
+                        to={tab.to}
+                        className={({ isActive }) => (isActive ? 'is-on' : undefined)}
+                        onClick={close}
+                      >
+                        {tab.label}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ) : null}
+            {links.slice(2).map((l) => (
+              <li key={l.label}>
+                <NavLink
+                  to={l.to}
+                  className={({ isActive }) => (isActive ? 'is-on' : undefined)}
+                  onClick={close}
+                >
+                  {l.label}
+                </NavLink>
               </li>
             ))}
           </ul>

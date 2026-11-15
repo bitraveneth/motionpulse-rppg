@@ -46,6 +46,30 @@ export function reliabilityFromRisk(level: RiskLevel): ReliabilityRemark {
   }
 }
 
+export type SignalFace = {
+  level: RiskLevel | 'unknown'
+  kind: ReliabilityKind
+  badge: string
+  hint: string
+}
+
+/** One signal chip. The raw word "high" is not shown beside the badge. */
+export function signalFace(level: string): SignalFace {
+  if (level === 'low') {
+    return { level, kind: 'stable', badge: 'Stable', hint: 'Clear pulse' }
+  }
+  if (level === 'moderate') {
+    return { level, kind: 'mixed', badge: 'Mixed', hint: 'Some motion' }
+  }
+  if (level === 'elevated') {
+    return { level, kind: 'unreliable', badge: 'Unreliable', hint: 'Motion in the band' }
+  }
+  if (level === 'high') {
+    return { level, kind: 'unreliable', badge: 'Unreliable', hint: 'Motion covers the pulse' }
+  }
+  return { level: 'unknown', kind: 'mixed', badge: 'Unknown', hint: 'No signal label' }
+}
+
 /** From continuous conflict score (same bands as conflictRiskLabel). */
 export function reliabilityFromConflict(c: number): ReliabilityRemark {
   if (c < 0.25) return reliabilityFromRisk('low')

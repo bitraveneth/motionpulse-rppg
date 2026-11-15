@@ -1,13 +1,25 @@
 /// <reference types="vitest/config" />
+import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { extname, join, resolve } from 'node:path'
+import { handleLocalTrain } from './server/localTrain'
+import { videoByteResponse } from './server/videoRange'
+import {
+  datasetActivity,
+  framesForDirectory,
+  inspectDatasetFolder,
+  resolveDatasetVideo,
+} from './src/lib/lab/datasetFolder'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
@@ -62,13 +74,197 @@ function demoClipsPlugin(): Plugin {
   }
 }
 
+function chooseDatasetFolder(): Promise<{ ok: true; path: string } | { ok: false; reason: string }> {
+  return new Promise((resolveChoice) => {
+    execFile(
+      'osascript',
+      ['-e', 'POSIX path of (choose folder with prompt "Choose the unzipped dataset folder")'],
+      { timeout: 120000 },
+      (error, stdout) => {
+        if (error) {
+          const message = String(error.message ?? '')
+          const cancelled = message.includes('User canceled') || message.includes('-128')
+          resolveChoice({ ok: false, reason: cancelled ? 'cancelled' : 'dialog_failed' })
+          return
+        }
+        const path = stdout.trim().replace(/\/$/, '')
+        resolveChoice(path ? { ok: true, path } : { ok: false, reason: 'cancelled' })
+      },
+    )
+  })
+}
+
+const preparedVideos = new Map<string, string>()
+let preparedBytes: { id: string; bytes: Uint8Array } | null = null
+
+function ffmpegBin(): string {
+  if (existsSync('/opt/homebrew/bin/ffmpeg')) return '/opt/homebrew/bin/ffmpeg'
+  if (existsSync('/usr/local/bin/ffmpeg')) return '/usr/local/bin/ffmpeg'
+  return 'ffmpeg'
+}
+
+function preparePlayableVideo(file: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const resolved = resolveDatasetVideo(file)
+  if (!resolved) return Promise.resolve({ ok: false, error: 'That is not a video file on this Mac.' })
+  const info = statSync(resolved)
+  const id = createHash('sha1')
+    .update(`${resolved}\0${info.mtimeMs}\0${info.size}`)
+    .digest('hex')
+    .slice(0, 20)
+  const dir = join(tmpdir(), 'motionpulse-lab')
+  const out = join(dir, `${id}.mp4`)
+  if (existsSync(out) && statSync(out).size > 0) {
+    preparedVideos.set(id, out)
+    return Promise.resolve({ ok: true, id })
+  }
+  mkdirSync(dir, { recursive: true })
+  return new Promise((resolvePrepare) => {
+    execFile(
+      ffmpegBin(),
+      ['-y', '-i', resolved, '-an', '-vf', 'fps=15', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', out],
+      { timeout: 180000 },
+      (error) => {
+        if (error || !existsSync(out) || statSync(out).size === 0) {
+          resolvePrepare({ ok: false, error: 'Could not open that video. ffmpeg did not produce a playable file.' })
+          return
+        }
+        preparedVideos.set(id, out)
+        resolvePrepare({ ok: true, id })
+      },
+    )
+  })
+}
+
+function imageType(file: string): string | null {
+  const ext = extname(file).toLowerCase()
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  return null
+}
+
+function resolveFrameFile(input: string): { file: string; type: string } | null {
+  const type = imageType(input)
+  if (!type) return null
+  const file = resolve(input.trim())
+  const home = process.env.HOME
+  if (file === '/' || file === '/Users' || file === '/tmp' || (home && file === home)) return null
+  try {
+    const info = statSync(file)
+    if (!info.isFile() || info.size <= 0 || info.size > 20_000_000) return null
+  } catch {
+    return null
+  }
+  return { file, type }
+}
+
+function sendJson(res: ServerResponse, body: unknown) {
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Cache-Control', 'no-store')
+  res.end(JSON.stringify(body))
+}
+
 /** Dev-only: serve out/batch-results.json for the Local lab panel. */
 function localLabBatchPlugin(): Plugin {
   return {
     name: 'local-lab-batch-results',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        const url = req.url?.split('?')[0]
+        const url = req.url?.split('?')[0] ?? ''
+        if (handleLocalTrain(req, res, url)) return
+        if (url === '/api/local-lab/choose-folder' && req.method === 'POST') {
+          void chooseDatasetFolder().then((choice) => {
+            if (!choice.ok) {
+              sendJson(res, choice)
+              return
+            }
+            sendJson(res, { ...choice, report: inspectDatasetFolder(choice.path) })
+          })
+          return
+        }
+        if (url === '/api/local-lab/scan' && req.method === 'POST') {
+          void readRequestBody(req).then((raw) => {
+            let folderPath = ''
+            try {
+              const body = JSON.parse(raw.toString('utf8')) as { path?: unknown }
+              if (typeof body.path === 'string') folderPath = body.path
+            } catch {
+              folderPath = ''
+            }
+            const report = inspectDatasetFolder(folderPath)
+            sendJson(res, { report, steps: datasetActivity(report) })
+          })
+          return
+        }
+        if (url === '/api/local-lab/prepare' && req.method === 'POST') {
+          void readRequestBody(req).then(async (raw) => {
+            let file = ''
+            try {
+              const body = JSON.parse(raw.toString('utf8')) as { file?: unknown }
+              if (typeof body.file === 'string') file = body.file
+            } catch {
+              file = ''
+            }
+            sendJson(res, await preparePlayableVideo(file))
+          })
+          return
+        }
+        if (url === '/api/local-lab/frames' && req.method === 'POST') {
+          void readRequestBody(req).then((raw) => {
+            let dir = ''
+            let fps = 30
+            try {
+              const body = JSON.parse(raw.toString('utf8')) as { dir?: unknown; fps?: unknown }
+              if (typeof body.dir === 'string') dir = body.dir
+              if (typeof body.fps === 'number' && Number.isFinite(body.fps)) fps = body.fps
+            } catch {
+              dir = ''
+            }
+            const listed = framesForDirectory(dir, fps)
+            if (!listed) {
+              sendJson(res, { ok: false, error: 'That frame folder does not have enough images.' })
+              return
+            }
+            sendJson(res, { ok: true, files: listed.files, fps: listed.fps })
+          })
+          return
+        }
+        if (url === '/api/local-lab/frame') {
+          const query = new URL(req.url ?? '', 'http://127.0.0.1').searchParams
+          const found = resolveFrameFile(query.get('file') ?? '')
+          if (!found) {
+            res.statusCode = 404
+            res.end()
+            return
+          }
+          res.statusCode = 200
+          res.setHeader('Content-Type', found.type)
+          res.setHeader('Cache-Control', 'private, max-age=3600')
+          res.end(readFileSync(found.file))
+          return
+        }
+        if (url === '/api/local-lab/media') {
+          const id = new URL(req.url ?? '', 'http://127.0.0.1').searchParams.get('id') ?? ''
+          const file = preparedVideos.get(id)
+          if (!file || !existsSync(file)) {
+            res.statusCode = 404
+            res.end()
+            return
+          }
+          if (preparedBytes?.id !== id) {
+            preparedBytes = { id, bytes: new Uint8Array(readFileSync(file)) }
+          }
+          const ranged = videoByteResponse(preparedBytes.bytes, 'video/mp4', req.headers.range)
+          res.statusCode = ranged.status
+          for (const [key, value] of Object.entries(ranged.headers)) res.setHeader(key, value)
+          res.end(ranged.body)
+          return
+        }
+        if (url === '/api/local-lab/folder') {
+          const query = new URL(req.url ?? '', 'http://127.0.0.1').searchParams
+          sendJson(res, inspectDatasetFolder(query.get('path') ?? ''))
+          return
+        }
         if (url !== '/api/local-lab/batch-results') {
           next()
           return

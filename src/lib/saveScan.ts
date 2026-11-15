@@ -61,6 +61,7 @@ async function persist(input: SettledClip): Promise<void> {
     respiratoryRate: input.respiratoryBpm,
     signalLabel: input.signalLabel,
     risk: input.riskLevel,
+    conflictScore: p ? Number(p.conflict.combined.toFixed(4)) : null,
     regionWeights: p
       ? ROI_IDS.map((id) => Number((p.reliability.weights[id] ?? 0).toFixed(4)))
       : [],

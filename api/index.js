@@ -159,7 +159,7 @@ function parseFeedDetail(value) {
 var MAX_FEED_VIDEO_BYTES = 2e6;
 
 // server/feedPost.ts
-var MAX_FEED_POSTS = 60;
+var MAX_FEED_POSTS = 400;
 var SOURCES = /* @__PURE__ */ new Set(["webcam", "upload", "sample"]);
 function parseFeedVideo(dataUrl) {
   if (dataUrl == null || dataUrl === "") return null;
@@ -324,6 +324,363 @@ function videoByteResponse(bytes, mime, rangeHeader) {
   };
 }
 
+// src/lib/lab/labSubject.ts
+var RISKS = /* @__PURE__ */ new Set(["low", "moderate", "elevated", "high"]);
+function finite2(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+function optional(value, lo, hi) {
+  if (value == null) return null;
+  const n = finite2(value);
+  if (n == null || n < lo || n > hi) return null;
+  return n;
+}
+var THUMB_MAX = 12e4;
+function parseThumb(value) {
+  if (typeof value !== "string") return null;
+  const thumb = value.trim();
+  if (!thumb.startsWith("data:image/")) return null;
+  if (thumb.length > THUMB_MAX) return null;
+  return thumb;
+}
+function parseMethod(value) {
+  if (value == null || value === "") return "CHROM";
+  if (value === "CHROM" || value === "POS") return value;
+  return null;
+}
+function datasetLabel(path) {
+  const parts = path.split(/[/\\]/).filter((part) => part && part !== "." && part !== "..");
+  return (parts.at(-1) || "Dataset").slice(0, 80);
+}
+function parseLabSubject(value) {
+  if (!value || typeof value !== "object") return null;
+  const body = value;
+  const subject = typeof body.subject === "string" ? body.subject.trim().slice(0, 80) : "";
+  const bpm = finite2(body.bpm);
+  const durationSec = finite2(body.durationSec);
+  const conflict = finite2(body.conflict);
+  const windows = finite2(body.windows);
+  const frames = finite2(body.frames);
+  const risk = typeof body.risk === "string" ? body.risk : "";
+  const detail = parseFeedDetail(body.detail);
+  const method = parseMethod(body.method);
+  if (!subject || subject.includes("/") || subject.includes("\\")) return null;
+  if (bpm == null || bpm <= 0 || bpm > 400) return null;
+  if (durationSec == null || durationSec <= 0 || durationSec > 600) return null;
+  if (conflict == null || conflict < 0 || conflict > 1) return null;
+  if (windows == null || windows < 1 || windows > 500) return null;
+  if (frames == null || frames < 16 || frames > 2e4) return null;
+  if (!RISKS.has(risk) || !detail || !method) return null;
+  const referenceBpm = optional(body.referenceBpm, 20, 240);
+  if (body.referenceBpm != null && referenceBpm == null) return null;
+  const plainBpm = optional(body.plainBpm, 0, 400);
+  if (body.plainBpm != null && (plainBpm == null || plainBpm <= 0)) return null;
+  const weightedBpm = optional(body.weightedBpm, 0, 400);
+  if (body.weightedBpm != null && (weightedBpm == null || weightedBpm <= 0)) return null;
+  const snr = optional(body.snr, 0, 1e12);
+  if (body.snr != null && snr == null) return null;
+  const respiratoryRate = optional(body.respiratoryRate, 2, 80);
+  if (body.respiratoryRate != null && respiratoryRate == null) return null;
+  const breathsInClip = optional(body.breathsInClip, 0, 80);
+  if (body.breathsInClip != null && breathsInClip == null) return null;
+  return {
+    subject,
+    bpm,
+    plainBpm,
+    weightedBpm,
+    referenceBpm,
+    snr,
+    durationSec,
+    respiratoryRate,
+    breathsInClip,
+    risk,
+    conflict,
+    windows: Math.round(windows),
+    frames: Math.round(frames),
+    method,
+    thumb: parseThumb(body.thumb),
+    detail
+  };
+}
+
+// src/lib/research/comparison.ts
+function finite3(value) {
+  return Number.isFinite(value);
+}
+function meanOf(values) {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+function sampleSd(values) {
+  if (values.length < 2) return null;
+  const center = meanOf(values);
+  if (center == null) return null;
+  const sum = values.reduce((total, value) => total + (value - center) ** 2, 0);
+  return Math.sqrt(sum / (values.length - 1));
+}
+function pearson(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return null;
+  const ax = xs.slice(0, n);
+  const ay = ys.slice(0, n);
+  const mx = meanOf(ax);
+  const my = meanOf(ay);
+  let num3 = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let i = 0; i < n; i++) {
+    const xa = ax[i] - mx;
+    const ya = ay[i] - my;
+    num3 += xa * ya;
+    dx += xa * xa;
+    dy += ya * ya;
+  }
+  const den = Math.sqrt(dx * dy);
+  if (den < 1e-12) return null;
+  return num3 / den;
+}
+function comparisonSummary(pairs, snrValues = []) {
+  const usable = pairs.filter(
+    (pair) => finite3(pair.estimate) && finite3(pair.reference)
+  );
+  const differences = usable.map((pair) => pair.estimate - pair.reference);
+  const mae = meanOf(differences.map((diff) => Math.abs(diff)));
+  const rmse = differences.length === 0 ? null : Math.sqrt(
+    differences.reduce((sum, diff) => sum + diff * diff, 0) / differences.length
+  );
+  const bias = meanOf(differences);
+  const sd = sampleSd(differences);
+  const snrs = snrValues.filter((value) => finite3(value) && value >= 0);
+  const snrMean = meanOf(snrs);
+  return {
+    n: usable.length,
+    mae,
+    rmse,
+    pearson: pearson(
+      usable.map((pair) => pair.estimate),
+      usable.map((pair) => pair.reference)
+    ),
+    bias,
+    sd,
+    loaLow: bias == null || sd == null ? null : bias - 1.96 * sd,
+    loaHigh: bias == null || sd == null ? null : bias + 1.96 * sd,
+    points: usable.map((pair) => ({
+      average: (pair.estimate + pair.reference) / 2,
+      difference: pair.estimate - pair.reference
+    })),
+    snrCount: snrs.length,
+    snrMean,
+    snrDb: snrMean != null && snrMean > 0 ? 10 * Math.log10(snrMean) : null
+  };
+}
+
+// server/labFeed.ts
+async function publishSubjectOnFeed(row) {
+  const data = {
+    nickname: row.subject.slice(0, 40),
+    bpm: row.bpm,
+    conflictScore: row.conflict,
+    riskLevel: row.risk,
+    respiratoryRate: row.respiratoryRate,
+    durationSec: row.durationSec,
+    source: "dataset",
+    thumb: row.thumb,
+    hasVideo: false,
+    datasetName: row.datasetName.slice(0, 80),
+    referenceBpm: row.referenceBpm,
+    method: row.method === "POS" ? "POS" : "CHROM",
+    labSubjectId: row.id,
+    detail: row.detail
+  };
+  await prisma.feedPost.upsert({
+    where: { labSubjectId: row.id },
+    create: { ...data, createdAt: row.createdAt },
+    update: data
+  });
+}
+
+// server/labTests.ts
+function hostname(header) {
+  if (header.startsWith("[")) {
+    const end = header.indexOf("]");
+    return end > 0 ? header.slice(1, end) : header;
+  }
+  return header.split(":")[0] ?? "";
+}
+function isLoopback(c) {
+  const host = hostname(c.req.header("host") ?? "");
+  return host === "127.0.0.1" || host === "localhost" || host === "::1";
+}
+async function canStore(c) {
+  if (isLoopback(c)) return true;
+  const account = await currentAccount(c);
+  return account?.role === "admin";
+}
+function testJson(row) {
+  return {
+    id: row.id,
+    createdAt: row.createdAt.toISOString(),
+    name: row.name,
+    faceCount: row.faceCount,
+    paired: row.paired,
+    mae: row.mae,
+    rmse: row.rmse,
+    pearson: row.pearson,
+    snrMean: row.snrMean,
+    snrDb: row.snrDb,
+    bias: row.bias,
+    loaLow: row.loaLow,
+    loaHigh: row.loaHigh
+  };
+}
+async function refreshSummary(testId) {
+  const subjects = await prisma.labSubject.findMany({
+    where: { testId },
+    select: { bpm: true, referenceBpm: true, snr: true }
+  });
+  const pairs = subjects.flatMap(
+    (row) => row.referenceBpm == null ? [] : [{ estimate: row.bpm, reference: row.referenceBpm }]
+  );
+  const snrs = subjects.flatMap((row) => row.snr == null ? [] : [row.snr]);
+  const summary = comparisonSummary(pairs, snrs);
+  await prisma.labTest.update({
+    where: { id: testId },
+    data: {
+      faceCount: subjects.length,
+      clipCount: subjects.length,
+      paired: summary.n,
+      mae: summary.mae,
+      rmse: summary.rmse,
+      pearson: summary.pearson,
+      snrMean: summary.snrMean,
+      snrDb: summary.snrDb,
+      bias: summary.bias,
+      loaLow: summary.loaLow,
+      loaHigh: summary.loaHigh
+    }
+  });
+  return summary;
+}
+function registerLabTests(app2) {
+  app2.get("/api/lab-tests", async (c) => {
+    const tests = await prisma.labTest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50
+    });
+    return c.json({ tests: tests.map(testJson) });
+  });
+  app2.get("/api/lab-tests/:id", async (c) => {
+    const test = await prisma.labTest.findUnique({
+      where: { id: c.req.param("id") },
+      include: { subjects: { orderBy: { createdAt: "asc" } } }
+    });
+    if (!test) return c.json({ error: "missing" }, 404);
+    const subjects = test.subjects.flatMap((row) => {
+      const detail = parseFeedDetail(row.detail);
+      if (!detail) return [];
+      return [
+        {
+          id: row.id,
+          createdAt: row.createdAt.toISOString(),
+          subject: row.subject,
+          bpm: row.bpm,
+          plainBpm: row.plainBpm,
+          weightedBpm: row.weightedBpm,
+          referenceBpm: row.referenceBpm,
+          snr: row.snr,
+          durationSec: row.durationSec,
+          respiratoryRate: row.respiratoryRate,
+          breathsInClip: row.breathsInClip,
+          risk: row.risk,
+          conflict: row.conflict,
+          windows: row.windows,
+          frames: row.frames,
+          method: parseMethod(row.method) ?? "CHROM",
+          thumb: row.thumb,
+          detail
+        }
+      ];
+    });
+    const agreement = comparisonSummary(
+      subjects.flatMap(
+        (row) => row.referenceBpm == null ? [] : [{ estimate: row.bpm, reference: row.referenceBpm }]
+      ),
+      subjects.flatMap((row) => row.snr == null ? [] : [row.snr])
+    );
+    return c.json({ test: testJson(test), subjects, agreement });
+  });
+  app2.post("/api/lab-tests", async (c) => {
+    if (!await canStore(c)) return c.json({ error: "sign_in_required" }, 401);
+    let body = null;
+    try {
+      const parsed = await c.req.json();
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        body = parsed;
+      }
+    } catch {
+      body = null;
+    }
+    const subject = parseLabSubject(body?.subject);
+    if (!body || !subject) return c.json({ error: "invalid" }, 400);
+    const requestedId = typeof body.id === "string" ? body.id : "";
+    const base = datasetLabel(typeof body.name === "string" ? body.name : "Dataset");
+    let testId = requestedId;
+    if (!testId) {
+      const created = await prisma.labTest.create({
+        data: { name: `${base} \xB7 ${subject.method}`.slice(0, 80) }
+      });
+      testId = created.id;
+    } else {
+      const existing = await prisma.labTest.findUnique({ where: { id: testId }, select: { id: true } });
+      if (!existing) return c.json({ error: "missing" }, 404);
+    }
+    const saved = await prisma.labSubject.create({
+      data: {
+        testId,
+        subject: subject.subject,
+        bpm: subject.bpm,
+        plainBpm: subject.plainBpm,
+        weightedBpm: subject.weightedBpm,
+        referenceBpm: subject.referenceBpm,
+        snr: subject.snr,
+        durationSec: subject.durationSec,
+        respiratoryRate: subject.respiratoryRate,
+        breathsInClip: subject.breathsInClip,
+        risk: subject.risk,
+        conflict: subject.conflict,
+        windows: subject.windows,
+        frames: subject.frames,
+        method: subject.method,
+        thumb: subject.thumb,
+        detail: subject.detail
+      },
+      select: { id: true, createdAt: true }
+    });
+    const agreement = await refreshSummary(testId);
+    let posted = true;
+    try {
+      await publishSubjectOnFeed({
+        id: saved.id,
+        createdAt: saved.createdAt,
+        subject: subject.subject,
+        bpm: subject.bpm,
+        referenceBpm: subject.referenceBpm,
+        durationSec: subject.durationSec,
+        respiratoryRate: subject.respiratoryRate,
+        risk: subject.risk,
+        conflict: subject.conflict,
+        thumb: subject.thumb,
+        detail: subject.detail,
+        datasetName: base,
+        method: subject.method
+      });
+    } catch {
+      posted = false;
+    }
+    return c.json({ id: testId, subjectId: saved.id, agreement, posted });
+  });
+}
+
 // server/password.ts
 import crypto2 from "node:crypto";
 var SCRYPT_N = 16384;
@@ -409,6 +766,7 @@ function clipData(raw, index) {
     respiratoryRate: num2(input.respiratoryRate),
     signalLabel: str2(input.signalLabel, 80),
     risk: str2(input.risk, 40),
+    conflictScore: num2(input.conflictScore),
     regionWeights: numList(input.regionWeights, 4),
     waveform: numList(input.waveform, 400),
     thumb: thumb && thumb.startsWith("data:image") ? thumb : null
@@ -549,6 +907,9 @@ var feedListSelect = {
   source: true,
   thumb: true,
   hasVideo: true,
+  datasetName: true,
+  referenceBpm: true,
+  method: true,
   videoMime: true,
   hidden: true,
   videoHidden: true,
@@ -565,7 +926,7 @@ app.get("/api/feed", async (c) => {
   const posts = await prisma.feedPost.findMany({
     where: { hidden: false },
     orderBy: { createdAt: "desc" },
-    take: 200,
+    take: 400,
     select: feedListSelect
   });
   return c.json({
@@ -687,6 +1048,7 @@ app.get("/api/me/sessions", async (c) => {
   });
   return c.json({ sessions });
 });
+registerLabTests(app);
 app.use("/api/admin/*", async (c, next) => {
   const account = await currentAccount(c);
   if (!account) return c.json({ error: "sign_in_required" }, 401);

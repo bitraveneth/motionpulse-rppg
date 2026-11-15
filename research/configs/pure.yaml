@@ -1,4 +1,4 @@
-# Stub — activate when PURE is under data/PURE (gitignored).
+# Reads data/PURE when that folder is on this machine. The Lab Train page can point elsewhere.
 dataset: pure
 data_root: data
 out_dir: research/out

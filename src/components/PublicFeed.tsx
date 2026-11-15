@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FeedDetail } from '../lib/feed/detail'
-import { reliabilityFromRisk } from '../lib/feed/reliability'
-import type { RiskLevel } from '../lib/feed/types'
 import {
   feedVideoUrl,
   listPublicFeed,
   type PublicFeedPost,
 } from '../lib/feed/publicFeed'
+import { SignalChip } from './SignalChip'
 
 export function PublicFeed() {
   const [posts, setPosts] = useState<PublicFeedPost[] | null>(null)
@@ -43,7 +42,7 @@ export function PublicFeed() {
           {posts === null
             ? 'Loading posts…'
             : count === 0
-              ? 'No one has posted a reading yet.'
+              ? 'No subject cards yet.'
               : `${count} ${count === 1 ? 'post' : 'posts'}`}
         </p>
       </header>
@@ -55,7 +54,9 @@ export function PublicFeed() {
       ) : null}
 
       {posts && posts.length === 0 && !error ? (
-        <p className="post-feed-empty">Posts show up here after someone shares a scan.</p>
+        <p className="post-feed-empty">
+          Subject cards show up here after a dataset run, with a face still and the same numbers.
+        </p>
       ) : null}
 
       <ol className="post-list">
@@ -77,7 +78,7 @@ function breathCountNote(rate: number, durationSec: number): string {
 function PostCard({ post }: { post: PublicFeedPost }) {
   const name = post.nickname?.trim() || 'Anonymous'
   const when = formatWhen(post.createdAt)
-  const signal = signalCopy(post.riskLevel)
+  const dataset = post.source === 'dataset'
 
   return (
     <li className="post-card">
@@ -96,12 +97,12 @@ function PostCard({ post }: { post: PublicFeedPost }) {
             <span>{when.time}</span>
           </time>
         </div>
-        <span className="post-card-source">{sourceLabel(post.source)}</span>
+        <span className="post-card-source">{sourceText(post)}</span>
       </header>
 
-      <p className="post-card-caption">
-        Shared a {post.durationSec.toFixed(0)} second face scan.
-      </p>
+      {dataset ? null : (
+        <p className="post-card-caption">Shared a {post.durationSec.toFixed(0)} second face scan.</p>
+      )}
 
       {post.hasVideo ? (
         <video
@@ -118,7 +119,7 @@ function PostCard({ post }: { post: PublicFeedPost }) {
         </video>
       ) : post.thumb ? (
         <img className="post-card-media" src={post.thumb} alt="" />
-      ) : (
+      ) : dataset ? null : (
         <div className="post-card-media post-card-media-empty">No photo</div>
       )}
 
@@ -146,9 +147,11 @@ function PostCard({ post }: { post: PublicFeedPost }) {
             )}
           </dd>
         </div>
-        <div className={`post-metric post-metric-signal kind-${signal.kind}`}>
+        <div className="post-metric post-metric-signal">
           <dt>Signal</dt>
-          <dd>{signal.badge}</dd>
+          <dd>
+            <SignalChip level={post.riskLevel} />
+          </dd>
         </div>
         <div className="post-metric">
           <dt>Length</dt>
@@ -157,6 +160,21 @@ function PostCard({ post }: { post: PublicFeedPost }) {
             <span> sec</span>
           </dd>
         </div>
+        {dataset ? (
+          <div className="post-metric">
+            <dt>File</dt>
+            <dd>
+              {post.referenceBpm != null ? (
+                <>
+                  {post.referenceBpm.toFixed(1)}
+                  <span> BPM</span>
+                </>
+              ) : (
+                '—'
+              )}
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       {post.detail ? <PostDetail detail={post.detail} /> : null}
@@ -233,25 +251,21 @@ function PostDetail({ detail }: { detail: FeedDetail }) {
   )
 }
 
+function sourceText(post: PublicFeedPost): string {
+  if (post.datasetName || post.source === 'dataset') {
+    const method = post.method === 'POS' ? 'POS' : 'CHROM'
+    return post.datasetName ? `${post.datasetName} · ${method}` : method
+  }
+  return sourceLabel(post.source)
+}
+
 function sourceLabel(source: string): string {
   if (source === 'webcam') return 'Webcam'
   if (source === 'upload') return 'Upload'
   if (source === 'sample') return 'Sample'
   if (source === 'batch') return 'Demo set'
+  if (source === 'dataset') return 'Dataset'
   return source
-}
-
-function signalCopy(level: string): { badge: string; kind: string } {
-  if (
-    level === 'low' ||
-    level === 'moderate' ||
-    level === 'elevated' ||
-    level === 'high'
-  ) {
-    const remark = reliabilityFromRisk(level as RiskLevel)
-    return { badge: remark.badge, kind: remark.kind }
-  }
-  return { badge: level || 'Unknown', kind: 'mixed' }
 }
 
 function formatWhen(iso: string): { date: string; time: string } {

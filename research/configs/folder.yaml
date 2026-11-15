@@ -1,0 +1,26 @@
+# A folder the Lab Train page chooses. UBFC videos or PURE image folders.
+dataset: folder
+data_root: data
+out_dir: research/out
+
+frames: 128
+height: 72
+width: 72
+sample_rate_hz: 30.0
+phys_band_hz: [0.7, 4.0]
+
+base_ch: 16
+epochs: 2
+batch_size: 4
+lr: 0.0001
+device: cpu
+
+alpha: 0.5
+beta: 0.5
+residual_floor: 0.15
+conflict_boost: 1.0
+
+max_subjects: 2
+max_train_windows: 8
+
+checkpoint: research/out/physnet_local.pt

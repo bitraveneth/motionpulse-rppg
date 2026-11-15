@@ -14,6 +14,9 @@ export type PublicFeedPost = {
   thumb: string | null
   hasVideo: boolean
   videoMime: string | null
+  datasetName: string | null
+  referenceBpm: number | null
+  method: string | null
   detail: FeedDetail | null
 }
 
@@ -95,6 +98,9 @@ export async function listPublicFeed(): Promise<PublicFeedPost[]> {
   return (json.posts ?? []).map((post) => ({
     ...post,
     videoMime: post.videoMime ?? null,
+    datasetName: post.datasetName ?? null,
+    referenceBpm: typeof post.referenceBpm === 'number' ? post.referenceBpm : null,
+    method: post.method === 'POS' || post.method === 'CHROM' ? post.method : null,
     detail: parseFeedDetail(post.detail),
   }))
 }

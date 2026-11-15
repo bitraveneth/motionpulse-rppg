@@ -1,3 +1,5 @@
+The hand procedure for installing Python, placing a dataset, and writing labels is `docs/manual-dataset-lab.md`.
+
 # Research pipeline (thesis RQ1–RQ4 scaffold)
 
 Python scientific path for motion-aware rPPG. The MotioPulse Vite demo stays the primary UI; this package trains/evaluates a **PhysNet-style** waveform backbone plus conflict and regional-reliability modules.
@@ -19,7 +21,7 @@ Requires Python ≥ 3.9. Uses CPU by default (`device: cpu` in YAML).
 
 ## Backbone
 
-Compact PhysNet-style 3D CNN (`research/models/physnet.py`).
+Compact PhysNet-style 3D CNN (`research/models/physnet.py`). The Lab page **Train** starts this on a folder you choose. UBFC (`ground_truth.txt` pulse row) and PURE (JSON waveform) are read by `research/data/facevideo.py`. DeeprPPG, ETA-rPPGNet, and AND-rPPG are not implemented.
 
 > Yu, Z., Li, X., & Zhao, G. *Remote Photoplethysmograph Signal Measurement from Facial Videos Using Spatio-Temporal Networks.* **BMVC 2019**.
 
