@@ -37,6 +37,14 @@ export type TrainedMiss = {
 
 export type ResearchVerdict = 'yes' | 'no' | 'partial' | 'wait'
 
+/** Two misses, in BPM, for one run. Left is the baseline and right is the method under test. */
+export type ComparePair = {
+  name: string
+  left: number
+  right: number
+  detail: string
+}
+
 export type ResearchReport = {
   rq1: {
     verdict: ResearchVerdict
@@ -46,7 +54,14 @@ export type ResearchReport = {
     plotLabel: string
     points: { conflict: number; error: number }[]
   }
-  rq2: { verdict: ResearchVerdict; sentence: string; lines: string[]; equalMae: number | null; weightedMae: number | null }
+  rq2: {
+    verdict: ResearchVerdict
+    sentence: string
+    lines: string[]
+    equalMae: number | null
+    weightedMae: number | null
+    pairs: ComparePair[]
+  }
   rq3: {
     verdict: ResearchVerdict
     sentence: string
@@ -54,6 +69,9 @@ export type ResearchReport = {
     plainMae: number | null
     awareMae: number | null
     hardCount: number
+    pairs: ComparePair[]
+    leftLabel: string
+    rightLabel: string
   }
   rq4: { verdict: ResearchVerdict; sentence: string; lines: string[]; sets: DatasetScore[] }
 }
@@ -168,6 +186,23 @@ function gateIsFlat(rows: ResearchRow[]): boolean {
   return gap != null && gap < 0.05
 }
 
+function plainAwareOnHard(runs: MethodRun[]): { name: string; hard: number; plain: number; aware: number }[] {
+  return runs.flatMap((run) => {
+    const hard = labeled(run.rows).filter((row) => hardMotion(row.risk) && finite(row.plainBpm))
+    if (hard.length === 0) return []
+    const plain = mae(
+      hard.map((row) => row.plainBpm!),
+      hard.map((row) => row.referenceBpm!),
+    )
+    const aware = mae(
+      hard.map((row) => row.cameraBpm),
+      hard.map((row) => row.referenceBpm!),
+    )
+    if (plain == null || aware == null) return []
+    return [{ name: title(run), hard: hard.length, plain, aware }]
+  })
+}
+
 function runMae(run: MethodRun): { mae: number | null; count: number } {
   const rows = labeled(run.rows)
   if (rows.length > 0) {
@@ -216,6 +251,7 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
   )
 
   const regionLines: string[] = []
+  const regionPairs: ComparePair[] = []
   let regionWins = 0
   let regionLosses = 0
   let primaryEqual: number | null = null
@@ -237,6 +273,12 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
     }
     if (equalMae == null || weightedMae == null) continue
     regionLines.push(`${title(run)} · equal mix ${bpm(equalMae)} BPM, trust weight ${bpm(weightedMae)} BPM`)
+    regionPairs.push({
+      name: title(run),
+      left: equalMae,
+      right: weightedMae,
+      detail: `${rows.length} videos`,
+    })
     if (weightedMae + 0.5 < equalMae) regionWins += 1
     else if (equalMae + 0.5 < weightedMae) regionLosses += 1
   }
@@ -259,6 +301,9 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
   }
 
   const cleanLines: string[] = []
+  const rq3Pairs: ComparePair[] = []
+  let rq3Left = 'Plain'
+  let rq3Right = 'Motion-aware'
   let cleanWins = 0
   let cleanLosses = 0
   let primaryPlain: number | null = null
@@ -281,9 +326,17 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
       primaryAware = cleanedMae
     }
     hardCount += hard.length
+    rq3Left = 'Every window'
+    rq3Right = 'Calm windows'
     cleanLines.push(
       `${title(run)} · on ${hard.length} hard videos, every window ${bpm(allMae)} BPM, calm windows ${bpm(cleanedMae)} BPM`,
     )
+    rq3Pairs.push({
+      name: title(run),
+      left: allMae,
+      right: cleanedMae,
+      detail: `${hard.length} hard videos`,
+    })
     if (cleanedMae + 0.5 < allMae) cleanWins += 1
     else if (allMae + 0.5 < cleanedMae) cleanLosses += 1
   }
@@ -309,23 +362,25 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
       0,
     )
     hardCount = hard
+    const comparable = plainAwareOnHard(withRows)
+    primaryPlain = comparable[0]?.plain ?? null
+    primaryAware = comparable[0]?.aware ?? null
+    for (const item of comparable) {
+      rq3Pairs.push({
+        name: item.name,
+        left: item.plain,
+        right: item.aware,
+        detail: `${item.hard} hard videos`,
+      })
+      cleanLines.push(
+        `${item.name} · plain ${bpm(item.plain)} BPM, motion-aware ${bpm(item.aware)} BPM on ${item.hard} hard videos`,
+      )
+    }
   } else if (withRows.length === 0) {
     rq3Verdict = 'wait'
     rq3Sentence = 'No labeled video yet.'
   } else {
-    const comparable = withRows.flatMap((run) => {
-      const hard = labeled(run.rows).filter((row) => hardMotion(row.risk) && finite(row.plainBpm))
-      if (hard.length === 0) return []
-      const plain = mae(
-        hard.map((row) => row.plainBpm!),
-        hard.map((row) => row.referenceBpm!),
-      )
-      const aware = mae(
-        hard.map((row) => row.cameraBpm),
-        hard.map((row) => row.referenceBpm!),
-      )
-      return plain == null || aware == null ? [] : [{ run, hard: hard.length, plain, aware }]
-    })
+    const comparable = plainAwareOnHard(withRows)
     hardCount = comparable.reduce((sum, item) => sum + item.hard, 0)
     if (comparable.length === 0) {
       rq3Verdict = 'wait'
@@ -343,8 +398,14 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
     primaryPlain = comparable[0]?.plain ?? null
     primaryAware = comparable[0]?.aware ?? null
     for (const item of comparable) {
+      rq3Pairs.push({
+        name: item.name,
+        left: item.plain,
+        right: item.aware,
+        detail: `${item.hard} hard videos`,
+      })
       cleanLines.push(
-        `${title(item.run)} · plain ${bpm(item.plain)} BPM, motion-aware ${bpm(item.aware)} BPM on ${item.hard} hard videos`,
+        `${item.name} · plain ${bpm(item.plain)} BPM, motion-aware ${bpm(item.aware)} BPM on ${item.hard} hard videos`,
       )
     }
   }
@@ -417,6 +478,7 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
       lines: regionLines,
       equalMae: primaryEqual,
       weightedMae: primaryWeighted,
+      pairs: regionPairs,
     },
     rq3: {
       verdict: rq3Verdict,
@@ -425,6 +487,9 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
       plainMae: primaryPlain,
       awareMae: primaryAware,
       hardCount,
+      pairs: rq3Pairs,
+      leftLabel: rq3Left,
+      rightLabel: rq3Right,
     },
     rq4: {
       verdict: rq4Verdict,

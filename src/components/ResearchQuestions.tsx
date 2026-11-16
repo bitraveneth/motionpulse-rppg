@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react'
-import { researchReport, type MethodRun, type ResearchVerdict, type TrainedMiss } from '../lib/research/answers'
+import {
+  researchReport,
+  type ComparePair,
+  type MethodRun,
+  type ResearchVerdict,
+  type TrainedMiss,
+} from '../lib/research/answers'
 
 const VERDICT_LABEL: Record<ResearchVerdict, string> = {
   yes: 'Yes',
   no: 'No',
   partial: 'Partly',
   wait: 'Not yet',
-}
-
-function shortName(name: string): string {
-  return name.length > 22 ? `${name.slice(0, 21)}…` : name
 }
 
 function trend(points: { conflict: number; error: number }[]): { at: (x: number) => number } | null {
@@ -81,35 +83,97 @@ function Scatter({ points }: { points: { conflict: number; error: number }[] }) 
   )
 }
 
-function Bars({ items, label }: { items: { name: string; value: number | null }[]; label: string }) {
-  const shown = items.filter((item) => item.value != null)
-  if (shown.length === 0) return null
-  const max = Math.max(1, ...shown.map((item) => item.value ?? 0))
-  const row = 36
-  const width = 360
-  const height = shown.length * row + 8
-  const labelX = 8
-  const barX = 132
-  const barMax = 168
+function Legend({ items }: { items: { name: string; tone: 'a' | 'b' }[] }) {
   return (
-    <svg className="rq-plot" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label}>
-      {shown.map((item, index) => {
-        const bar = ((item.value ?? 0) / max) * barMax
-        const y = index * row + 10
-        return (
-          <g key={`${item.name}-${index}`}>
-            <text x={labelX} y={y + 14}>
-              {shortName(item.name)}
-            </text>
-            <rect className="rq-track" x={barX} y={y} width={barMax} height="18" rx="9" />
-            <rect className={index % 2 === 0 ? 'rq-bar rq-bar-a' : 'rq-bar rq-bar-b'} x={barX} y={y} width={Math.max(8, bar)} height="18" rx="9" />
-            <text className="rq-bar-value" x={barX + barMax + 8} y={y + 13}>
-              {(item.value ?? 0).toFixed(1)}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
+    <div className="rq-legend">
+      {items.map((item) => (
+        <span key={item.name}>
+          <i className={`rq-swatch rq-swatch-${item.tone}`} aria-hidden />
+          {item.name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function meterWidth(value: number, max: number): string {
+  if (max <= 0 || value <= 0) return '0%'
+  return `${Math.max(3, (value / max) * 100)}%`
+}
+
+function CompareChart({
+  pairs,
+  leftLabel,
+  rightLabel,
+}: {
+  pairs: ComparePair[]
+  leftLabel: string
+  rightLabel: string
+}) {
+  if (pairs.length === 0) return null
+  const max = Math.max(1, ...pairs.flatMap((pair) => [pair.left, pair.right]))
+  return (
+    <figure className="rq-chart" aria-label={`${leftLabel} against ${rightLabel}`}>
+      <Legend
+        items={[
+          { name: leftLabel, tone: 'a' },
+          { name: rightLabel, tone: 'b' },
+        ]}
+      />
+      <ul className="rq-groups">
+        {pairs.map((pair) => (
+          <li key={`${pair.name}-${pair.detail}`}>
+            <p className="rq-group-name">
+              {pair.name}
+              {pair.detail ? <span>{pair.detail}</span> : null}
+            </p>
+            <div className="rq-meter">
+              <span className="rq-meter-label">{leftLabel}</span>
+              <span className="rq-meter-track">
+                <span className="rq-meter-fill rq-fill-a" style={{ width: meterWidth(pair.left, max) }} />
+              </span>
+              <span className="rq-meter-value">{pair.left.toFixed(1)}</span>
+            </div>
+            <div className="rq-meter">
+              <span className="rq-meter-label">{rightLabel}</span>
+              <span className="rq-meter-track">
+                <span className="rq-meter-fill rq-fill-b" style={{ width: meterWidth(pair.right, max) }} />
+              </span>
+              <span className="rq-meter-value">{pair.right.toFixed(1)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <figcaption className="rq-chart-note">Longer bar means a larger miss, in BPM.</figcaption>
+    </figure>
+  )
+}
+
+function MeterChart({ items, label }: { items: { name: string; value: number | null; detail?: string }[]; label: string }) {
+  const shown = items.filter((item): item is { name: string; value: number; detail?: string } => item.value != null)
+  if (shown.length === 0) return null
+  const max = Math.max(1, ...shown.map((item) => item.value))
+  return (
+    <figure className="rq-chart" aria-label={label}>
+      <Legend items={[{ name: label, tone: 'b' }]} />
+      <ul className="rq-groups">
+        {shown.map((item) => (
+          <li key={item.name}>
+            <p className="rq-group-name">
+              {item.name}
+              {item.detail ? <span>{item.detail}</span> : null}
+            </p>
+            <div className="rq-meter rq-meter-solo">
+              <span className="rq-meter-track">
+                <span className="rq-meter-fill rq-fill-b" style={{ width: meterWidth(item.value, max) }} />
+              </span>
+              <span className="rq-meter-value">{item.value.toFixed(1)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <figcaption className="rq-chart-note">Longer bar means a larger miss, in BPM.</figcaption>
+    </figure>
   )
 }
 
@@ -140,15 +204,15 @@ function Question({
   children?: ReactNode
 }) {
   return (
-    <article className="lab-q">
+    <article className={`lab-q rq-mark-${verdict}`}>
       <header className="rq-head">
         <p className="lab-q-num">{num}</p>
         <p className={`rq-answer rq-answer-${verdict}`}>{VERDICT_LABEL[verdict]}</p>
       </header>
       <h3>{title}</h3>
-      <p>{sentence}</p>
-      <Lines items={lines ?? []} />
+      <p className="rq-sentence">{sentence}</p>
       {children}
+      <Lines items={lines ?? []} />
     </article>
   )
 }
@@ -161,6 +225,7 @@ export function ResearchQuestions({
   trained?: TrainedMiss[]
 }) {
   const report = researchReport(runs, trained)
+  const trainedLines = report.rq4.lines.filter((line) => line.startsWith('PhysNet'))
   return (
     <div className="lab-q-grid">
       <Question
@@ -170,33 +235,52 @@ export function ResearchQuestions({
         sentence={report.rq1.sentence}
         lines={report.rq1.lines}
       >
-        <Scatter points={report.rq1.points} />
-        {report.rq1.plotLabel ? <p className="rq-note">{report.rq1.plotLabel}</p> : null}
+        {report.rq1.points.length > 0 ? (
+          <figure className="rq-chart">
+            <Scatter points={report.rq1.points} />
+            <figcaption className="rq-chart-note">
+              {report.rq1.plotLabel ? `${report.rq1.plotLabel}. ` : ''}
+              Each dot is one video. The dashed line is the trend.
+            </figcaption>
+          </figure>
+        ) : null}
       </Question>
       <Question
         num="RQ2"
         title="Does smarter face-region weighting help?"
         verdict={report.rq2.verdict}
         sentence={report.rq2.sentence}
-        lines={report.rq2.lines}
-      />
+        lines={report.rq2.pairs.length > 0 ? [] : report.rq2.lines}
+      >
+        <CompareChart pairs={report.rq2.pairs} leftLabel="Equal mix" rightLabel="Trust weight" />
+      </Question>
       <Question
         num="RQ3"
         title="Does the motion-aware method beat a plain baseline when motion is hard?"
         verdict={report.rq3.verdict}
         sentence={report.rq3.sentence}
-        lines={report.rq3.lines}
-      />
+        lines={report.rq3.pairs.length > 0 ? [] : report.rq3.lines}
+      >
+        <CompareChart
+          pairs={report.rq3.pairs}
+          leftLabel={report.rq3.leftLabel}
+          rightLabel={report.rq3.rightLabel}
+        />
+      </Question>
       <Question
         num="RQ4"
         title="Does it still work on a new camera / dataset?"
         verdict={report.rq4.verdict}
         sentence={report.rq4.sentence}
-        lines={report.rq4.lines}
+        lines={report.rq4.sets.length > 0 ? trainedLines : report.rq4.lines}
       >
-        <Bars
-          label="Miss by method and camera, BPM"
-          items={report.rq4.sets.map((set) => ({ name: set.name, value: set.mae }))}
+        <MeterChart
+          label="Miss"
+          items={report.rq4.sets.map((set) => ({
+            name: set.name,
+            value: set.mae,
+            detail: set.count > 0 ? `${set.count} videos` : undefined,
+          }))}
         />
       </Question>
     </div>
