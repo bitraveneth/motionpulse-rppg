@@ -104,6 +104,7 @@ export function registerLabTests(app: App) {
       include: { subjects: { orderBy: { createdAt: 'asc' } } },
     })
     if (!test) return c.json({ error: 'missing' }, 404)
+    const brief = c.req.query('brief') === '1'
     const subjects = test.subjects.flatMap((row) => {
       const detail = parseFeedDetail(row.detail)
       if (!detail) return []
@@ -115,6 +116,7 @@ export function registerLabTests(app: App) {
           bpm: row.bpm,
           plainBpm: row.plainBpm,
           weightedBpm: row.weightedBpm,
+          cleanedBpm: row.cleanedBpm,
           referenceBpm: row.referenceBpm,
           snr: row.snr,
           durationSec: row.durationSec,
@@ -125,7 +127,7 @@ export function registerLabTests(app: App) {
           windows: row.windows,
           frames: row.frames,
           method: parseMethod(row.method) ?? 'CHROM',
-          thumb: row.thumb,
+          thumb: brief ? null : row.thumb,
           detail,
         },
       ]
@@ -171,6 +173,7 @@ export function registerLabTests(app: App) {
         bpm: subject.bpm,
         plainBpm: subject.plainBpm,
         weightedBpm: subject.weightedBpm,
+        cleanedBpm: subject.cleanedBpm,
         referenceBpm: subject.referenceBpm,
         snr: subject.snr,
         durationSec: subject.durationSec,

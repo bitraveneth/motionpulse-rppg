@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { statSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolve } from 'node:path'
+import { saveFinishedTrain } from './trainRuns'
 
 const BROAD = new Set(['/', '/Users', '/private', '/tmp', '/opt', '/System', '/Volumes'])
 
@@ -14,6 +15,8 @@ let exitCode: number | null = null
 let folder = ''
 let epochs = 0
 let subjects = 0
+let startedAt: Date | null = null
+let savedId: string | null = null
 
 function push(line: string) {
   const clean = line.replace(/\r/g, '').trimEnd()
@@ -22,7 +25,7 @@ function push(line: string) {
 }
 
 function snapshot() {
-  return { state, log, exitCode, path: folder, epochs, subjects }
+  return { state, log, exitCode, path: folder, epochs, subjects, savedId }
 }
 
 function safeDir(input: string): { ok: true; path: string } | { ok: false; error: string } {
@@ -137,7 +140,7 @@ export function handleLocalTrain(req: IncomingMessage, res: ServerResponse, url:
         send(res, { ok: false, error: 'A training run is already going.' })
         return
       }
-      let body: { path?: unknown; epochs?: unknown; subjects?: unknown } = {}
+      let body: { path?: unknown; epochs?: unknown; subjects?: unknown; crossPath?: unknown } = {}
       try {
         body = JSON.parse(raw.toString('utf8')) as typeof body
       } catch {
@@ -150,20 +153,22 @@ export function handleLocalTrain(req: IncomingMessage, res: ServerResponse, url:
       }
       const epochCount = clamp(body.epochs, 1, 30, 2)
       const subjectCount = clamp(body.subjects, 0, 80, 2)
-      const windowCount = Math.min(
-        200,
-        Math.max(4, (subjectCount === 0 ? 12 : subjectCount) * (epochCount >= 30 ? 8 : 4)),
-      )
+      const windowCount = subjectCount === 0 ? 48 : Math.min(80, Math.max(4, subjectCount * (epochCount >= 30 ? 4 : 2)))
+      const crossInput = typeof body.crossPath === 'string' ? body.crossPath.trim() : ''
+      const cross = crossInput ? safeDir(crossInput) : null
       folder = safe.path
       epochs = epochCount
       subjects = subjectCount
       exitCode = null
+      startedAt = new Date()
+      savedId = null
       state = 'running'
       log = [
         `train  ${safe.path}`,
         `passes  ${epochCount}`,
         subjectCount === 0 ? 'people  every person in the folder' : `people  ${subjectCount}`,
         'note  each clip uses the first 30 seconds',
+        cross?.ok && cross.path !== safe.path ? `test  ${cross.path}` : 'test  people held out of this folder',
       ]
       const args = [
         '-m',
@@ -181,6 +186,7 @@ export function handleLocalTrain(req: IncomingMessage, res: ServerResponse, url:
         '--max-subjects',
         String(subjectCount),
       ]
+      if (cross?.ok && cross.path !== safe.path) args.push('--cross-root', cross.path)
       const proc = spawn('python3', args, {
         cwd: process.cwd(),
         env: pythonEnv(),
@@ -194,9 +200,26 @@ export function handleLocalTrain(req: IncomingMessage, res: ServerResponse, url:
       proc.stderr?.on('data', onData)
       proc.on('close', (code, signal) => {
         exitCode = code
-        state = signal ? 'stopped' : code === 0 ? 'done' : 'error'
-        push(state === 'done' ? 'done  checkpoint research/out/physnet_local.pt' : `stop  ${signal ?? code ?? 'error'}`)
+        const status = signal ? 'stopped' : code === 0 ? 'done' : 'error'
+        state = status
+        push(status === 'done' ? 'done  checkpoint research/out/physnet_local.pt' : `stop  ${signal ?? code ?? 'error'}`)
         if (child === proc) child = null
+        const finished = {
+          startedAt: startedAt ?? new Date(),
+          folder,
+          epochs,
+          people: subjects,
+          status,
+          log: [...log],
+        } satisfies Parameters<typeof saveFinishedTrain>[0]
+        void saveFinishedTrain(finished)
+          .then((id) => {
+            savedId = id
+            push('saved  this run is in Train results')
+          })
+          .catch(() => {
+            push('saved  the database did not keep this run')
+          })
       })
       send(res, { ok: true, ...snapshot() })
     })

@@ -50,8 +50,9 @@ export async function fetchLabTests(): Promise<LabTestSummary[]> {
   return json.tests ?? []
 }
 
-export async function fetchLabTest(id: string): Promise<LabTestDetail> {
-  const res = await fetch(`/api/lab-tests/${encodeURIComponent(id)}`, { cache: 'no-store' })
+export async function fetchLabTest(id: string, options?: { brief?: boolean }): Promise<LabTestDetail> {
+  const query = options?.brief ? '?brief=1' : ''
+  const res = await fetch(`/api/lab-tests/${encodeURIComponent(id)}${query}`, { cache: 'no-store' })
   if (!res.ok) throw new Error('That test is not in the database')
   return (await res.json()) as LabTestDetail
 }

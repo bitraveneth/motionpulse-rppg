@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -37,6 +38,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--dataset", default=None)
     p.add_argument("--max-windows", type=int, default=None)
     p.add_argument("--max-subjects", type=int, default=None)
+    p.add_argument("--cross-root", default=None, help="Another dataset folder to score after training")
     return p.parse_args()
 
 
@@ -156,10 +158,99 @@ def main() -> int:
         ckpt,
     )
     hist_path = out_dir / "train_history.json"
-    hist_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
+    clean_history = []
+    for row in history:
+        loss = row.get("loss")
+        if isinstance(loss, float) and math.isfinite(loss):
+            clean_history.append({"epoch": int(row["epoch"]), "loss": loss})
+    hist_path.write_text(json.dumps(clean_history, indent=2), encoding="utf-8")
+    counts = getattr(train_ds, "subject_windows", {})
+    names = getattr(train_ds, "subjects", [])
+    learned = []
+    if isinstance(counts, dict) and isinstance(names, list):
+        learned = [
+            {"name": str(name), "windows": int(counts.get(name, 0))}
+            for name in names
+        ]
+    held = [str(name) for name in getattr(train_ds, "held_out", [])]
     print(f"saved checkpoint → {ckpt}")
     print(f"saved history → {hist_path}")
+    held_mae, held_count, held_people, cross_name, cross_mae, cross_count = _score_checkpoint(
+        model, cfg, device, args.cross_root
+    )
+    if held_mae is not None:
+        print(f"held out  MAE {held_mae:.1f} BPM  {held_count} people")
+    if cross_mae is not None and cross_name:
+        print(f"cross  {cross_name}  MAE {cross_mae:.1f} BPM  {cross_count} people")
+    print(
+        "record "
+        + json.dumps(
+            {
+                "windows": len(train_ds),
+                "learned": learned,
+                "heldOut": held_people or held,
+                "heldMae": None if held_mae is None else round(held_mae, 2),
+                "heldCount": held_count,
+                "crossName": cross_name,
+                "crossMae": None if cross_mae is None else round(cross_mae, 2),
+                "crossCount": cross_count,
+                "history": clean_history,
+                "checkpoint": str(ckpt),
+            },
+            separators=(",", ":"),
+        )
+    )
     return 0
+
+
+def _people_dataset(root: str, split: str, cfg: dict, max_windows: int, max_subjects: int | None):
+    from research.data.facevideo import FaceVideoDataset
+
+    return FaceVideoDataset(
+        root=root,
+        split=split,
+        frames=int(cfg.get("frames", 128)),
+        height=int(cfg.get("height", 72)),
+        width=int(cfg.get("width", 72)),
+        max_windows=max_windows,
+        max_subjects=max_subjects,
+    )
+
+
+def _score_checkpoint(model, cfg: dict, device, cross_root: str | None):
+    """Held-out miss on the training folder, then an optional other folder."""
+    from research.heldout import people_miss
+
+    root = str(cfg.get("data_root", ""))
+    raw_subjects = cfg.get("max_subjects")
+    max_subjects = int(raw_subjects) if raw_subjects else None
+    held_mae = None
+    held_count = 0
+    held_people: list = []
+    cross_name = ""
+    cross_mae = None
+    cross_count = 0
+    try:
+        held_ds = _people_dataset(root, "test", cfg, 24, max_subjects)
+        held = people_miss(model, held_ds, cfg, device)
+        held_mae = held["mae"]
+        held_count = int(held["count"])
+        by_name = {person["name"]: person for person in held["people"]}
+        for name in getattr(held_ds, "held_out", []):
+            info = by_name.get(str(name))
+            held_people.append(info or {"name": str(name), "windows": 0})
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        print(f"held out  error  {exc}")
+    if cross_root:
+        try:
+            other = _people_dataset(cross_root, "all", cfg, 40, None)
+            scored = people_miss(model, other, cfg, device)
+            cross_name = Path(cross_root).name
+            cross_mae = scored["mae"]
+            cross_count = int(scored["count"])
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            print(f"cross  error  {exc}")
+    return held_mae, held_count, held_people, cross_name, cross_mae, cross_count
 
 
 if __name__ == "__main__":

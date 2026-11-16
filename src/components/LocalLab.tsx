@@ -18,7 +18,7 @@ import {
   type LabTestSummary,
 } from '../lib/lab/labTestApi'
 import { comparisonSummary, type ComparisonSummary } from '../lib/research/comparison'
-import type { DatasetScore, ResearchRow } from '../lib/research/answers'
+import { runIdentity, type MethodRun, type ResearchRow } from '../lib/research/answers'
 import { CANDIDATE_METHODS, type CandidateMethod } from '../lib/rppg/types'
 import { streamAnalyzeImages, streamAnalyzeVideo, type AnalysisBuffer } from '../lib/video/streamAnalyze'
 import { AgreementMetrics, Tip } from './AgreementMetrics'
@@ -84,6 +84,7 @@ function researchFromSubject(row: LabSubjectRecord): ResearchRow {
     referenceBpm: row.referenceBpm,
     conflict: row.conflict,
     risk: row.risk,
+    cleanedBpm: row.cleanedBpm,
   }
 }
 
@@ -195,27 +196,29 @@ export function LocalLab({ slot }: { slot: HTMLElement | null }) {
       },
     ]
   }, [liveCards, batch, references])
-  const datasets = useMemo((): DatasetScore[] => {
-    const byName = new Map<string, DatasetScore>()
-    for (const test of savedTests) {
-      if (!byName.has(test.name)) {
-        byName.set(test.name, { name: test.name, mae: test.mae, count: test.faceCount })
+  const researchRuns = useMemo((): MethodRun[] => {
+    const saved = savedTests.map((test) => {
+      const identity = runIdentity(test.name)
+      return {
+        dataset: identity.dataset,
+        method: identity.method,
+        rows: [] as ResearchRow[],
+        mae: test.mae,
+        count: test.faceCount,
       }
-    }
-    if (path && liveCards.length > 0) {
-      for (const method of CANDIDATE_METHODS) {
-        const subset = liveCards.filter((row) => row.method === method)
-        if (subset.length === 0) continue
-        const name = `${datasetLabel(path)} · ${method}`
-        const gaps = subset.flatMap((row) =>
-          row.referenceBpm == null ? [] : [Math.abs(row.bpm - row.referenceBpm)],
-        )
-        const mae = gaps.length === 0 ? null : gaps.reduce((sum, value) => sum + value, 0) / gaps.length
-        byName.set(name, { name, mae, count: subset.length })
-      }
-    }
-    return [...byName.values()]
-  }, [savedTests, path, liveCards])
+    })
+    const live = researchGroups.flatMap((group) => {
+      if (group.rows.length === 0) return []
+      return [
+        {
+          dataset: datasetLabel(path || 'This run'),
+          method: group.method ?? 'CHROM',
+          rows: group.rows,
+        },
+      ]
+    })
+    return [...saved, ...live]
+  }, [savedTests, researchGroups, path])
   const summaries = useMemo((): { method: CandidateMethod | null; summary: ComparisonSummary }[] => {
     const results = batch?.results ?? []
     const present = CANDIDATE_METHODS.filter((method) =>
@@ -346,6 +349,7 @@ export function LocalLab({ slot }: { slot: HTMLElement | null }) {
       bpm: reading.bpm,
       plainBpm: reading.plainBpm,
       weightedBpm: reading.weightedBpm,
+      cleanedBpm: reading.cleanedBpm,
       referenceBpm: clip.referenceBpm,
       snr: reading.snr,
       durationSec: reading.durationSec,
@@ -506,6 +510,29 @@ export function LocalLab({ slot }: { slot: HTMLElement | null }) {
       }
     }
   }
+
+  const autoFolder = useRef<string | null>(null)
+  useEffect(() => {
+    if (!slot || autoFolder.current) return
+    const host = window.location.hostname
+    if (host !== '127.0.0.1' && host !== 'localhost') return
+    const params = new URLSearchParams(window.location.search)
+    const folder = params.get('folder')
+    if (!folder) return
+    const picked = (params.get('methods') ?? 'CHROM,POS')
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item): item is CandidateMethod => item === 'CHROM' || item === 'POS')
+    if (picked.length > 0) setMethods(picked)
+    autoFolder.current = folder
+    setPath(folder)
+  }, [slot])
+
+  useEffect(() => {
+    if (!autoFolder.current || path !== autoFolder.current || starting || methods.length === 0) return
+    autoFolder.current = null
+    void startFolder()
+  }, [path, methods, starting])
 
   const sheet = (
     <div className="lab-sheet">
@@ -706,25 +733,7 @@ export function LocalLab({ slot }: { slot: HTMLElement | null }) {
 
       <section aria-labelledby="lab-rq-title">
         <h2 id="lab-rq-title">Research questions</h2>
-        {researchGroups.map((group) => (
-          <div key={group.method ?? 'run'}>
-            {researchGroups.length > 1 && group.method ? (
-              <h3 className="lab-method-title">{group.method}</h3>
-            ) : null}
-            <ResearchQuestions
-              rows={group.rows}
-              datasets={
-                group.method
-                  ? datasets.filter((item) => {
-                      if (item.name.endsWith(' · POS')) return group.method === 'POS'
-                      if (item.name.endsWith(' · CHROM')) return group.method === 'CHROM'
-                      return group.method === 'CHROM'
-                    })
-                  : datasets
-              }
-            />
-          </div>
-        ))}
+        <ResearchQuestions runs={researchRuns} />
       </section>
     </div>
   )

@@ -25,6 +25,7 @@ describe('readingsFromBuffer', () => {
     expect(reading.durationSec).toBeGreaterThan(8)
     expect(reading.plainBpm).not.toBeNull()
     expect(reading.weightedBpm).not.toBeNull()
+    expect(reading.cleanedBpm == null || Number.isFinite(reading.cleanedBpm)).toBe(true)
     expect(reading.detail.spectrum.combined).toBeGreaterThanOrEqual(0)
     expect(reading.detail.trust.forehead).toBeGreaterThanOrEqual(0)
     expect(reading.detail.motion.overall).toBeGreaterThanOrEqual(0)

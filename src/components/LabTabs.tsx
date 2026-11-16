@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { useContent } from '../lib/content'
 import { LAB_DESTINATIONS } from '../lib/lab/destinations'
 
-/** Same three lab screens on this Mac and on the live site. */
+/** Lab screens, the same on this Mac and on the live site. */
 export function LabTabs() {
   const c = useContent()
   return (
@@ -12,6 +12,7 @@ export function LabTabs() {
           <NavLink
             key={tab.to}
             to={tab.to}
+            end={tab.to === '/train'}
             className={({ isActive }) => (isActive ? 'is-on' : undefined)}
           >
             {tab.label}

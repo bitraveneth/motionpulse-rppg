@@ -130,6 +130,15 @@ export function SubjectResultCard({ row }: { row: LabSubjectRecord }) {
             <SignalChip level={row.risk} />
           </dd>
         </div>
+        {row.cleanedBpm != null ? (
+          <div className="post-metric">
+            <dt>Calm windows</dt>
+            <dd>
+              {row.cleanedBpm.toFixed(0)}
+              <span> BPM</span>
+            </dd>
+          </div>
+        ) : null}
         <div className="post-metric">
           <dt>Length</dt>
           <dd>

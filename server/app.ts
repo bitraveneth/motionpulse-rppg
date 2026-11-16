@@ -12,6 +12,7 @@ import { MAX_FEED_POSTS, parseFeedPost } from './feedPost'
 import { toPhoneMp4 } from './transcodeVideo'
 import { videoByteResponse } from './videoRange'
 import { registerLabTests } from './labTests'
+import { registerTrainRuns } from './trainRuns'
 import { hashPassword, randomPassword, verifyPassword } from './password'
 
 export const app = new Hono<{ Variables: { account: SessionAccount } }>()
@@ -394,6 +395,7 @@ app.get('/api/me/sessions', async (c) => {
 })
 
 registerLabTests(app)
+registerTrainRuns(app)
 
 // ---------- admin ----------
 

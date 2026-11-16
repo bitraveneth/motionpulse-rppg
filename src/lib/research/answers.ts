@@ -7,6 +7,8 @@ export type ResearchRow = {
   referenceBpm: number | null
   conflict: number
   risk: string
+  /** Heart rate averaged from windows below the elevated conflict band. */
+  cleanedBpm?: number | null
 }
 
 export type DatasetScore = {
@@ -15,24 +17,45 @@ export type DatasetScore = {
   count: number
 }
 
+/** One saved method on one dataset. Rows are empty when only the summary miss is known. */
+export type MethodRun = {
+  dataset: string
+  method: string
+  rows: ResearchRow[]
+  mae?: number | null
+  count?: number
+}
+
+/** A PhysNet miss in BPM, on people held out of training or on another dataset. */
+export type TrainedMiss = {
+  trainedOn: string
+  testedOn: string
+  mae: number
+  count: number
+  kind: 'held out' | 'other camera'
+}
+
 export type ResearchVerdict = 'yes' | 'no' | 'partial' | 'wait'
 
 export type ResearchReport = {
   rq1: {
     verdict: ResearchVerdict
     sentence: string
+    lines: string[]
     r: number | null
+    plotLabel: string
     points: { conflict: number; error: number }[]
   }
-  rq2: { verdict: ResearchVerdict; sentence: string; equalMae: number | null; weightedMae: number | null }
+  rq2: { verdict: ResearchVerdict; sentence: string; lines: string[]; equalMae: number | null; weightedMae: number | null }
   rq3: {
     verdict: ResearchVerdict
     sentence: string
+    lines: string[]
     plainMae: number | null
     awareMae: number | null
     hardCount: number
   }
-  rq4: { verdict: ResearchVerdict; sentence: string; sets: DatasetScore[] }
+  rq4: { verdict: ResearchVerdict; sentence: string; lines: string[]; sets: DatasetScore[] }
 }
 
 function finite(value: number | null | undefined): value is number {
@@ -67,9 +90,65 @@ function hardMotion(risk: string): boolean {
   return risk === 'elevated' || risk === 'high'
 }
 
-export function researchReport(rows: ResearchRow[], datasets: DatasetScore[]): ResearchReport {
-  const labeled = rows.filter((row) => finite(row.referenceBpm) && finite(row.cameraBpm))
-  const points = labeled
+function labeled(rows: ResearchRow[]): ResearchRow[] {
+  return rows.filter((row) => finite(row.referenceBpm) && finite(row.cameraBpm))
+}
+
+/** "UBFC · POS" is the dataset and the method. A bare name is treated as CHROM. */
+export function runIdentity(name: string): { dataset: string; method: string } {
+  const parts = name
+    .split('·')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length >= 2 && (parts[1] === 'POS' || parts[1] === 'CHROM')) {
+    return { dataset: parts[0]!, method: parts[1]! }
+  }
+  return { dataset: parts[0] || 'Dataset', method: 'CHROM' }
+}
+
+function runKey(run: MethodRun): string {
+  return `${run.dataset} ${run.method}`
+}
+
+function runCount(run: MethodRun): number {
+  const fromRows = labeled(run.rows).length
+  if (fromRows > 0) return fromRows
+  return run.count ?? 0
+}
+
+function hasCleaned(run: MethodRun): boolean {
+  return labeled(run.rows).some((row) => finite(row.cleanedBpm))
+}
+
+/** The fullest run of each dataset and method. A same-size run that stored calm windows wins a tie. */
+export function fullestRuns(runs: MethodRun[]): MethodRun[] {
+  const best = new Map<string, MethodRun>()
+  for (const run of runs) {
+    const key = runKey(run)
+    const current = best.get(key)
+    if (!current) {
+      best.set(key, run)
+      continue
+    }
+    const nextCount = runCount(run)
+    const currentCount = runCount(current)
+    if (nextCount > currentCount || (nextCount === currentCount && hasCleaned(run) && !hasCleaned(current))) {
+      best.set(key, run)
+    }
+  }
+  return [...best.values()].sort((a, b) => {
+    const bySet = a.dataset.localeCompare(b.dataset)
+    if (bySet !== 0) return bySet
+    return a.method.localeCompare(b.method)
+  })
+}
+
+function title(run: MethodRun): string {
+  return `${run.dataset} ${run.method}`
+}
+
+function conflictLink(rows: ResearchRow[]): { r: number | null; points: { conflict: number; error: number }[]; n: number } {
+  const points = labeled(rows)
     .filter((row) => finite(row.conflict))
     .map((row) => ({ conflict: row.conflict, error: Math.abs(row.cameraBpm - row.referenceBpm!) }))
   const link =
@@ -79,108 +158,279 @@ export function researchReport(rows: ResearchRow[], datasets: DatasetScore[]): R
           points.map((point) => point.conflict),
           points.map((point) => point.error),
         )
-  let rq1Sentence: string
+  return { r: link, points, n: points.length }
+}
+
+function gateIsFlat(rows: ResearchRow[]): boolean {
+  const pairs = labeled(rows).filter((row) => finite(row.plainBpm))
+  if (pairs.length === 0) return true
+  const gap = mean(pairs.map((row) => Math.abs(row.cameraBpm - row.plainBpm!)))
+  return gap != null && gap < 0.05
+}
+
+function runMae(run: MethodRun): { mae: number | null; count: number } {
+  const rows = labeled(run.rows)
+  if (rows.length > 0) {
+    return {
+      mae: mae(
+        rows.map((row) => row.cameraBpm),
+        rows.map((row) => row.referenceBpm!),
+      ),
+      count: rows.length,
+    }
+  }
+  return { mae: finite(run.mae) ? run.mae : null, count: run.count ?? 0 }
+}
+
+export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): ResearchReport {
+  const chosen = fullestRuns(runs)
+  const withRows = chosen.filter((run) => labeled(run.rows).length > 0)
+  const links = withRows
+    .map((run) => ({ run, ...conflictLink(run.rows) }))
+    .filter((item) => item.n >= 2 && item.r != null)
+  const plotted = links.reduce<(typeof links)[number] | null>((best, item) => {
+    if (!best || item.n > best.n) return item
+    if (item.n === best.n && item.run.method === 'POS' && best.run.method !== 'POS') return item
+    return best
+  }, null)
+
   let rq1Verdict: ResearchVerdict
-  if (points.length < 2) {
+  let rq1Sentence: string
+  if (links.length === 0) {
     rq1Verdict = 'wait'
-    rq1Sentence =
-      points.length === 1
-        ? `One labeled video. The miss is ${bpm(points[0]!.error)} BPM at conflict ${points[0]!.conflict.toFixed(2)}. A line needs two videos.`
-        : 'No labeled video yet. Conflict can be lined up with the miss after Run.'
-  } else if (link == null) {
-    rq1Verdict = 'wait'
-    rq1Sentence = `Conflict does not vary across ${points.length} videos, so it cannot be lined up with the miss.`
-  } else if (link >= 0.3) {
+    rq1Sentence = withRows.length === 0
+      ? 'No labeled video yet. Conflict can be lined up with the miss after a full run.'
+      : 'Conflict does not vary across the labeled videos, so it cannot be lined up with the miss.'
+  } else if (links.every((item) => item.r! >= 0.3)) {
     rq1Verdict = 'yes'
-    rq1Sentence = `Yes. Higher conflict lines up with a larger miss (r = ${rtext(link)} on ${points.length} videos).`
-  } else if (link <= 0) {
+    rq1Sentence = 'Yes. On every full run, higher conflict lines up with a larger miss.'
+  } else if (links.every((item) => item.r! <= 0)) {
     rq1Verdict = 'no'
-    rq1Sentence = `No. Higher conflict does not line up with a larger miss (r = ${rtext(link)} on ${points.length} videos).`
+    rq1Sentence = 'No. On these full runs, higher conflict does not line up with a larger miss.'
   } else {
     rq1Verdict = 'partial'
-    rq1Sentence = `Only weakly. Conflict and the miss line up at r = ${rtext(link)} on ${points.length} videos.`
+    rq1Sentence = 'Only weakly, and not on every method. Each line is the fullest saved run.'
   }
+  const rq1Lines = links.map(
+    (item) => `${title(item.run)} · r = ${rtext(item.r)} on ${item.n} videos`,
+  )
 
-  const equalMae = mae(
-    labeled.map((row) => row.cameraBpm),
-    labeled.map((row) => row.referenceBpm!),
-  )
-  const weightedRows = labeled.filter((row) => finite(row.weightedBpm))
-  const weightedMae = mae(
-    weightedRows.map((row) => row.weightedBpm!),
-    weightedRows.map((row) => row.referenceBpm!),
-  )
-  let rq2Sentence: string
+  const regionLines: string[] = []
+  let regionWins = 0
+  let regionLosses = 0
+  let primaryEqual: number | null = null
+  let primaryWeighted: number | null = null
+  for (const run of withRows) {
+    const rows = labeled(run.rows)
+    const equalMae = mae(
+      rows.map((row) => row.cameraBpm),
+      rows.map((row) => row.referenceBpm!),
+    )
+    const weightedRows = rows.filter((row) => finite(row.weightedBpm))
+    const weightedMae = mae(
+      weightedRows.map((row) => row.weightedBpm!),
+      weightedRows.map((row) => row.referenceBpm!),
+    )
+    if (primaryEqual == null) {
+      primaryEqual = equalMae
+      primaryWeighted = weightedMae
+    }
+    if (equalMae == null || weightedMae == null) continue
+    regionLines.push(`${title(run)} · equal mix ${bpm(equalMae)} BPM, trust weight ${bpm(weightedMae)} BPM`)
+    if (weightedMae + 0.5 < equalMae) regionWins += 1
+    else if (equalMae + 0.5 < weightedMae) regionLosses += 1
+  }
   let rq2Verdict: ResearchVerdict
-  if (equalMae == null) {
+  let rq2Sentence: string
+  if (regionLines.length === 0) {
     rq2Verdict = 'wait'
-    rq2Sentence = 'No labeled video yet, so region weighting has nothing to beat.'
-  } else if (weightedMae == null) {
-    rq2Verdict = 'wait'
-    rq2Sentence = `The equal mix misses by ${bpm(equalMae)} BPM. A trust-weighted heart rate was not stored for this test.`
-  } else if (weightedMae + 0.5 < equalMae) {
+    rq2Sentence = withRows.length === 0
+      ? 'No labeled video yet, so region weighting has nothing to beat.'
+      : 'A trust-weighted heart rate was not stored for these runs.'
+  } else if (regionWins === regionLines.length) {
     rq2Verdict = 'yes'
-    rq2Sentence = `Yes. Trust-weighted regions miss by ${bpm(weightedMae)} BPM. The equal mix misses by ${bpm(equalMae)} BPM.`
-  } else if (equalMae + 0.5 < weightedMae) {
+    rq2Sentence = 'Yes. Trust-weighted regions are closer than an equal mix on every full run.'
+  } else if (regionLosses === regionLines.length) {
     rq2Verdict = 'no'
-    rq2Sentence = `No. The equal mix is closer, ${bpm(equalMae)} BPM, than trust weighting at ${bpm(weightedMae)} BPM.`
+    rq2Sentence = 'No. The equal mix is closer than trust weighting on every full run.'
   } else {
     rq2Verdict = 'partial'
-    rq2Sentence = `About the same. Equal mix ${bpm(equalMae)} BPM, trust weighting ${bpm(weightedMae)} BPM.`
+    rq2Sentence = 'It depends on the dataset and the method. Trust weighting wins some runs and loses others.'
   }
 
-  const hard = labeled.filter((row) => hardMotion(row.risk) && finite(row.plainBpm))
-  const plainMae = mae(
-    hard.map((row) => row.plainBpm!),
-    hard.map((row) => row.referenceBpm!),
-  )
-  const awareMae = mae(
-    hard.map((row) => row.cameraBpm),
-    hard.map((row) => row.referenceBpm!),
-  )
-  let rq3Sentence: string
+  const cleanLines: string[] = []
+  let cleanWins = 0
+  let cleanLosses = 0
+  let primaryPlain: number | null = null
+  let primaryAware: number | null = null
+  let hardCount = 0
+  for (const run of withRows) {
+    const hard = labeled(run.rows).filter((row) => hardMotion(row.risk) && finite(row.cleanedBpm))
+    if (hard.length === 0) continue
+    const allMae = mae(
+      hard.map((row) => row.cameraBpm),
+      hard.map((row) => row.referenceBpm!),
+    )
+    const cleanedMae = mae(
+      hard.map((row) => row.cleanedBpm!),
+      hard.map((row) => row.referenceBpm!),
+    )
+    if (allMae == null || cleanedMae == null) continue
+    if (primaryPlain == null) {
+      primaryPlain = allMae
+      primaryAware = cleanedMae
+    }
+    hardCount += hard.length
+    cleanLines.push(
+      `${title(run)} · on ${hard.length} hard videos, every window ${bpm(allMae)} BPM, calm windows ${bpm(cleanedMae)} BPM`,
+    )
+    if (cleanedMae + 0.5 < allMae) cleanWins += 1
+    else if (allMae + 0.5 < cleanedMae) cleanLosses += 1
+  }
   let rq3Verdict: ResearchVerdict
-  if (labeled.length === 0) {
+  let rq3Sentence: string
+  if (cleanLines.length > 0) {
+    if (cleanWins === cleanLines.length) {
+      rq3Verdict = 'yes'
+      rq3Sentence = 'Yes. Leaving out high-conflict windows is closer on the hard videos.'
+    } else if (cleanLosses === cleanLines.length) {
+      rq3Verdict = 'no'
+      rq3Sentence = 'No. On the hard videos, averaging every window is closer than keeping only the calm ones.'
+    } else {
+      rq3Verdict = 'partial'
+      rq3Sentence = 'Leaving out high-conflict windows helps on some runs and not on others.'
+    }
+  } else if (withRows.length > 0 && withRows.every((run) => gateIsFlat(run.rows))) {
+    rq3Verdict = 'wait'
+    rq3Sentence =
+      'The conflict gate does not move the heart rate, so the plain rate and the saved rate match. A rate that leaves out high-conflict windows is not in these tests yet.'
+    const hard = withRows.reduce(
+      (sum, run) => sum + labeled(run.rows).filter((row) => hardMotion(row.risk)).length,
+      0,
+    )
+    hardCount = hard
+  } else if (withRows.length === 0) {
     rq3Verdict = 'wait'
     rq3Sentence = 'No labeled video yet.'
-  } else if (hard.length === 0) {
-    rq3Verdict = 'wait'
-    rq3Sentence = 'No video in this test was in the high-motion band.'
-  } else if (plainMae == null || awareMae == null) {
-    rq3Verdict = 'wait'
-    rq3Sentence = `${hard.length} high-motion videos have no plain heart rate stored beside the file.`
-  } else if (awareMae + 0.5 < plainMae) {
-    rq3Verdict = 'yes'
-    rq3Sentence = `Yes. On ${hard.length} high-motion videos the motion-aware rate misses by ${bpm(awareMae)} BPM. The plain rate misses by ${bpm(plainMae)} BPM.`
-  } else if (plainMae + 0.5 < awareMae) {
-    rq3Verdict = 'no'
-    rq3Sentence = `No. On ${hard.length} high-motion videos the plain rate is closer, ${bpm(plainMae)} BPM, than the motion-aware rate at ${bpm(awareMae)} BPM.`
   } else {
-    rq3Verdict = 'partial'
-    rq3Sentence = `About the same on ${hard.length} high-motion videos. Plain ${bpm(plainMae)} BPM, motion-aware ${bpm(awareMae)} BPM.`
+    const comparable = withRows.flatMap((run) => {
+      const hard = labeled(run.rows).filter((row) => hardMotion(row.risk) && finite(row.plainBpm))
+      if (hard.length === 0) return []
+      const plain = mae(
+        hard.map((row) => row.plainBpm!),
+        hard.map((row) => row.referenceBpm!),
+      )
+      const aware = mae(
+        hard.map((row) => row.cameraBpm),
+        hard.map((row) => row.referenceBpm!),
+      )
+      return plain == null || aware == null ? [] : [{ run, hard: hard.length, plain, aware }]
+    })
+    hardCount = comparable.reduce((sum, item) => sum + item.hard, 0)
+    if (comparable.length === 0) {
+      rq3Verdict = 'wait'
+      rq3Sentence = 'No video in these runs was in the high-motion band.'
+    } else if (comparable.every((item) => item.aware + 0.5 < item.plain)) {
+      rq3Verdict = 'yes'
+      rq3Sentence = 'Yes. On the hard videos the motion-aware rate is closer than the plain rate.'
+    } else if (comparable.every((item) => item.plain + 0.5 < item.aware)) {
+      rq3Verdict = 'no'
+      rq3Sentence = 'No. On the hard videos the plain rate is closer than the motion-aware rate.'
+    } else {
+      rq3Verdict = 'partial'
+      rq3Sentence = 'On the hard videos the plain rate and the motion-aware rate are about the same.'
+    }
+    primaryPlain = comparable[0]?.plain ?? null
+    primaryAware = comparable[0]?.aware ?? null
+    for (const item of comparable) {
+      cleanLines.push(
+        `${title(item.run)} · plain ${bpm(item.plain)} BPM, motion-aware ${bpm(item.aware)} BPM on ${item.hard} hard videos`,
+      )
+    }
   }
 
-  const sets = datasets.filter((set) => set.count > 0)
-  const named = sets.filter((set) => finite(set.mae))
-  let rq4Sentence: string
+  const scoreByKey = new Map<string, { dataset: string; method: string; mae: number; count: number }>()
+  for (const run of chosen) {
+    const score = runMae(run)
+    if (score.mae == null || score.count <= 0) continue
+    scoreByKey.set(runKey(run), { dataset: run.dataset, method: run.method, mae: score.mae, count: score.count })
+  }
+  const methods = [...new Set([...scoreByKey.values()].map((score) => score.method))].sort()
+  const rq4Lines: string[] = []
+  const rq4Sets: DatasetScore[] = []
+  const spread: number[] = []
+  for (const method of methods) {
+    const sets = [...scoreByKey.values()]
+      .filter((score) => score.method === method)
+      .sort((a, b) => a.dataset.localeCompare(b.dataset))
+    if (sets.length === 0) continue
+    rq4Lines.push(
+      `${method} · ${sets.map((set) => `${set.dataset} ${bpm(set.mae)} BPM (${set.count})`).join(' · ')}`,
+    )
+    for (const set of sets) {
+      rq4Sets.push({ name: `${method} · ${set.dataset}`, mae: set.mae, count: set.count })
+      spread.push(set.mae)
+    }
+  }
+  const trainedLines = trained
+    .filter((miss) => finite(miss.mae) && miss.count > 0)
+    .map((miss) =>
+      miss.kind === 'held out'
+        ? `PhysNet held out of ${miss.trainedOn} · ${bpm(miss.mae)} BPM (${miss.count})`
+        : `PhysNet trained on ${miss.trainedOn}, tested on ${miss.testedOn} · ${bpm(miss.mae)} BPM (${miss.count})`,
+    )
   let rq4Verdict: ResearchVerdict
-  if (named.length === 0) {
+  let rq4Sentence: string
+  if (rq4Sets.length === 0 && trainedLines.length === 0) {
     rq4Verdict = 'wait'
     rq4Sentence = 'No saved dataset has a file heart rate yet.'
-  } else if (named.length === 1) {
+  } else if (spread.length === 0) {
     rq4Verdict = 'partial'
-    const only = named[0]!
-    rq4Sentence = `On ${only.name}, the miss is ${bpm(only.mae)} BPM across ${only.count} subjects. A second dataset is not in the saved tests yet.`
-  } else {
+    rq4Sentence = 'PhysNet has a held-out miss. A classical run on two cameras is not in the saved tests yet.'
+  } else if (new Set([...scoreByKey.values()].map((score) => score.dataset)).size < 2) {
+    rq4Verdict = 'partial'
+    const only = [...scoreByKey.values()][0]!
+    rq4Sentence = `On ${only.dataset}, the miss is ${bpm(only.mae)} BPM across ${only.count} subjects. A second dataset is not in the saved tests yet.`
+  } else if (spread.every((value) => value <= 10)) {
     rq4Verdict = 'yes'
-    const bits = named.map((set) => `${set.name} ${bpm(set.mae)} BPM (${set.count} subjects)`)
-    rq4Sentence = `Yes. Each saved dataset has a miss: ${bits.join('. ')}.`
+    rq4Sentence = 'Yes. The same methods stay within 10 BPM on every saved camera.'
+  } else if (spread.every((value) => value > 15)) {
+    rq4Verdict = 'no'
+    rq4Sentence = 'No. The miss stays above 15 BPM on every saved camera.'
+  } else {
+    rq4Verdict = 'partial'
+    rq4Sentence = 'It is closer on one camera than the other. Each line is one method on the cameras that were saved.'
   }
 
   return {
-    rq1: { verdict: rq1Verdict, sentence: rq1Sentence, r: link, points },
-    rq2: { verdict: rq2Verdict, sentence: rq2Sentence, equalMae, weightedMae },
-    rq3: { verdict: rq3Verdict, sentence: rq3Sentence, plainMae, awareMae, hardCount: hard.length },
-    rq4: { verdict: rq4Verdict, sentence: rq4Sentence, sets: named },
+    rq1: {
+      verdict: rq1Verdict,
+      sentence: rq1Sentence,
+      lines: rq1Lines,
+      r: plotted?.r ?? null,
+      plotLabel: plotted ? title(plotted.run) : '',
+      points: plotted?.points ?? [],
+    },
+    rq2: {
+      verdict: rq2Verdict,
+      sentence: rq2Sentence,
+      lines: regionLines,
+      equalMae: primaryEqual,
+      weightedMae: primaryWeighted,
+    },
+    rq3: {
+      verdict: rq3Verdict,
+      sentence: rq3Sentence,
+      lines: cleanLines,
+      plainMae: primaryPlain,
+      awareMae: primaryAware,
+      hardCount,
+    },
+    rq4: {
+      verdict: rq4Verdict,
+      sentence: rq4Sentence,
+      lines: [...rq4Lines, ...trainedLines],
+      sets: rq4Sets,
+    },
   }
 }

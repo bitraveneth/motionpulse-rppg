@@ -31,6 +31,7 @@ describe('lab subject records', () => {
     })
     expect(row?.subject).toBe('subject1')
     expect(row?.method).toBe('CHROM')
+    expect(row?.cleanedBpm).toBeNull()
     expect(parseLabSubject({ ...row, method: 'POS' })?.method).toBe('POS')
     expect(parseLabSubject({ ...row, method: 'ICA' })).toBeNull()
     expect(row?.thumb).toBeNull()

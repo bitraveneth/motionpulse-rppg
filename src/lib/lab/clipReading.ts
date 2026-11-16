@@ -17,6 +17,8 @@ export type ClipReading = {
   plainBpm: number | null
   /** Heart rate after trust-weighting the four face regions. */
   weightedBpm: number | null
+  /** Mean heart rate of windows below the elevated conflict band. */
+  cleanedBpm: number | null
   durationSec: number
   respiratoryRate: number | null
   breathsInClip: number | null
@@ -58,6 +60,7 @@ export function readingsFromBuffer(buffer: AnalysisBuffer, method: CandidateMeth
   const bpms: number[] = []
   const plains: number[] = []
   const weighteds: number[] = []
+  const calm: number[] = []
   const snrs: number[] = []
   let last: ReturnType<typeof runPipeline> | null = null
   for (const start of starts) {
@@ -71,6 +74,7 @@ export function readingsFromBuffer(buffer: AnalysisBuffer, method: CandidateMeth
     })
     if (Number.isFinite(result.gatedBpm) && result.gatedBpm > 0) {
       bpms.push(result.gatedBpm)
+      if (result.conflict.combined < 0.5) calm.push(result.gatedBpm)
       snrs.push(spectralSnr(result.spectra.gated, fLo, fHi))
       if (Number.isFinite(result.estimatedBpm) && result.estimatedBpm > 0) plains.push(result.estimatedBpm)
       const weighted = dominantFrequency(periodogram(result.aggregated, slice.sampleRateHz), fLo, fHi).freqHz * 60
@@ -96,6 +100,7 @@ export function readingsFromBuffer(buffer: AnalysisBuffer, method: CandidateMeth
     windows: bpms.length,
     plainBpm: plains.length > 0 ? mean(plains) : null,
     weightedBpm: weighteds.length > 0 ? mean(weighteds) : null,
+    cleanedBpm: calm.length > 0 ? mean(calm) : null,
     conflict: last.conflict.combined,
     risk: conflictRiskLabel(last.conflict.combined).level,
     weights: last.reliability.weights,

@@ -403,6 +403,16 @@ def frames_to_keep(window: int, stride: int, per_clip: Optional[int]) -> int:
     return max(window, min(MAX_READ_FRAMES, need))
 
 
+def _window_hr(wave: np.ndarray) -> float:
+    """Dominant heart rate of one training window. Zero when the curve has no rate."""
+    from research.metrics.hr import waveform_to_hr
+
+    value = float(waveform_to_hr(wave, READ_FPS))
+    if not math.isfinite(value) or value <= 0:
+        return 0.0
+    return value
+
+
 def make_windows(
     video: np.ndarray,
     wave: np.ndarray,
@@ -476,7 +486,8 @@ class FaceVideoDataset:
                     "video": torch.from_numpy(item["video"]),
                     "waveform": torch.from_numpy(item["waveform"]),
                     "motion": torch.from_numpy(item["motion"]),
-                    "hr_bpm": torch.tensor(0.0, dtype=torch.float32),
+                    "hr_bpm": torch.tensor(float(item.get("hr_bpm", 0.0)), dtype=torch.float32),
+                    "subject": str(item.get("subject", "")),
                     "quality": {},
                     "motion_mag": {},
                 }
@@ -490,8 +501,13 @@ class FaceVideoDataset:
                 "UBFC needs ground_truth.txt beside the video. "
                 "PURE needs the waveform in the JSON, not only the pulse rate."
             )
-        train_names, hold_names = training_subjects([clip.subject for clip in clips], max_subjects)
-        chosen_names = {"train": train_names, "val": hold_names, "test": hold_names}.get(split, train_names)
+        all_names = sorted({clip.subject for clip in clips}, key=natural_key)
+        if split == "all":
+            train_names, hold_names = all_names, []
+            chosen_names = all_names
+        else:
+            train_names, hold_names = training_subjects([clip.subject for clip in clips], max_subjects)
+            chosen_names = {"train": train_names, "val": hold_names, "test": hold_names}.get(split, train_names)
         if split == "val" and not chosen_names:
             chosen_names = hold_names
         selected = [clip for clip in clips if clip.subject in set(chosen_names)]
@@ -523,9 +539,19 @@ class FaceVideoDataset:
                 video = read_images(clip.images, int(height), int(width), keep)
                 full_count = max(clip.image_count, int(video.shape[1]))
             wave = align_waveform(clip.wave, int(video.shape[1]), full_count, clip.times)
-            items.extend(make_windows(video, wave, int(frames), stride, per_clip))
+            made = make_windows(video, wave, int(frames), stride, per_clip)
+            for item in made:
+                item["subject"] = clip.subject
+                item["hr_bpm"] = _window_hr(item["waveform"])
+            items.extend(made)
         if max_windows is not None and int(max_windows) > 0:
             items = items[: int(max_windows)]
+        counts: dict[str, int] = {name: 0 for name in self.subjects}
+        for item in items:
+            name = str(item.get("subject", ""))
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+        self.subject_windows = counts
         if not items:
             raise RuntimeError(
                 f"Clips in {root} are shorter than {frames} frames after the first "

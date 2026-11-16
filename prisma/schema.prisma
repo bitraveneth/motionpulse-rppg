@@ -158,6 +158,8 @@ model LabSubject {
   plainBpm        Float?
   /// Heart rate after trust-weighting the four face regions.
   weightedBpm     Float?
+  /// Mean heart rate of windows below the elevated conflict band.
+  cleanedBpm      Float?
   referenceBpm    Float?
   snr             Float?
   durationSec     Float
@@ -175,6 +177,49 @@ model LabSubject {
   detail          Json
 
   @@index([testId])
+}
+
+// One PhysNet training finish. Numbers and names only — the videos stay on disk.
+model TrainRun {
+  id          String        @id @default(cuid())
+  startedAt   DateTime
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  name        String
+  method      String        @default("PhysNet")
+  folder      String
+  epochs      Int
+  people      Int
+  windowCount Int           @default(0)
+  finalLoss   Float?
+  bestLoss    Float?
+  /// Mean absolute miss, in BPM, on people held out of this run.
+  heldMae     Float?
+  heldCount   Int           @default(0)
+  /// Dataset the checkpoint was tested on after training, when one was chosen.
+  crossName   String        @default("")
+  crossMae    Float?
+  crossCount  Int           @default(0)
+  checkpoint  String        @default("")
+  status      String
+  note        String        @default("")
+  history     Json
+  peopleRows  TrainPerson[]
+
+  @@index([startedAt])
+}
+
+model TrainPerson {
+  id      String   @id @default(cuid())
+  runId   String
+  run     TrainRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  subject       String
+  role          String
+  windows       Int    @default(0)
+  bpm           Float?
+  referenceBpm  Float?
+
+  @@index([runId])
 }
 
 model GroundTruth {

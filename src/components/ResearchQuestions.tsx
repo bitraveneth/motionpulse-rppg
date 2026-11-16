@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { researchReport, type DatasetScore, type ResearchRow, type ResearchVerdict } from '../lib/research/answers'
+import { researchReport, type MethodRun, type ResearchVerdict, type TrainedMiss } from '../lib/research/answers'
 
 const VERDICT_LABEL: Record<ResearchVerdict, string> = {
   yes: 'Yes',
@@ -113,17 +113,30 @@ function Bars({ items, label }: { items: { name: string; value: number | null }[
   )
 }
 
+function Lines({ items }: { items: string[] }) {
+  if (items.length === 0) return null
+  return (
+    <ul className="rq-lines">
+      {items.map((item, index) => (
+        <li key={`${index}-${item}`}>{item}</li>
+      ))}
+    </ul>
+  )
+}
+
 function Question({
   num,
   title,
   verdict,
   sentence,
+  lines,
   children,
 }: {
   num: string
   title: string
   verdict: ResearchVerdict
   sentence: string
+  lines?: string[]
   children?: ReactNode
 }) {
   return (
@@ -134,19 +147,20 @@ function Question({
       </header>
       <h3>{title}</h3>
       <p>{sentence}</p>
+      <Lines items={lines ?? []} />
       {children}
     </article>
   )
 }
 
 export function ResearchQuestions({
-  rows,
-  datasets,
+  runs,
+  trained = [],
 }: {
-  rows: ResearchRow[]
-  datasets: DatasetScore[]
+  runs: MethodRun[]
+  trained?: TrainedMiss[]
 }) {
-  const report = researchReport(rows, datasets)
+  const report = researchReport(runs, trained)
   return (
     <div className="lab-q-grid">
       <Question
@@ -154,45 +168,34 @@ export function ResearchQuestions({
         title="Does the conflict score actually track real error?"
         verdict={report.rq1.verdict}
         sentence={report.rq1.sentence}
+        lines={report.rq1.lines}
       >
         <Scatter points={report.rq1.points} />
+        {report.rq1.plotLabel ? <p className="rq-note">{report.rq1.plotLabel}</p> : null}
       </Question>
       <Question
         num="RQ2"
         title="Does smarter face-region weighting help?"
         verdict={report.rq2.verdict}
         sentence={report.rq2.sentence}
-      >
-        <Bars
-          label="Equal mix and trust weighting, BPM"
-          items={[
-            { name: 'Equal mix', value: report.rq2.equalMae },
-            { name: 'Trust weight', value: report.rq2.weightedMae },
-          ]}
-        />
-      </Question>
+        lines={report.rq2.lines}
+      />
       <Question
         num="RQ3"
         title="Does the motion-aware method beat a plain baseline when motion is hard?"
         verdict={report.rq3.verdict}
         sentence={report.rq3.sentence}
-      >
-        <Bars
-          label="Plain and motion-aware miss on high-motion videos, BPM"
-          items={[
-            { name: 'Plain', value: report.rq3.plainMae },
-            { name: 'Motion-aware', value: report.rq3.awareMae },
-          ]}
-        />
-      </Question>
+        lines={report.rq3.lines}
+      />
       <Question
         num="RQ4"
         title="Does it still work on a new camera / dataset?"
         verdict={report.rq4.verdict}
         sentence={report.rq4.sentence}
+        lines={report.rq4.lines}
       >
         <Bars
-          label="Miss by dataset, BPM"
+          label="Miss by method and camera, BPM"
           items={report.rq4.sets.map((set) => ({ name: set.name, value: set.mae }))}
         />
       </Question>

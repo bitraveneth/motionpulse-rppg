@@ -5,7 +5,8 @@ import { LabTabs } from '../components/LabTabs'
 import { ResearchQuestions } from '../components/ResearchQuestions'
 import { SiteNav } from '../components/SiteNav'
 import { SubjectResultCard } from '../components/SubjectResultCard'
-import type { DatasetScore, ResearchRow } from '../lib/research/answers'
+import { runIdentity, type MethodRun, type ResearchRow, type TrainedMiss } from '../lib/research/answers'
+import { fetchTrainRuns, type TrainRunSummary } from '../lib/lab/trainRunApi'
 import {
   fetchLabTest,
   fetchLabTests,
@@ -33,27 +34,65 @@ function researchRows(detail: LabTestDetail): ResearchRow[] {
     referenceBpm: row.referenceBpm,
     conflict: row.conflict,
     risk: row.risk,
+    cleanedBpm: row.cleanedBpm,
   }))
 }
 
-function researchSets(tests: LabTestSummary[], detail: LabTestDetail): DatasetScore[] {
-  const list: DatasetScore[] = []
-  for (const test of tests) {
-    if (list.some((item) => item.name === test.name)) continue
-    list.push(
-      test.id === detail.test.id
-        ? { name: test.name, mae: detail.agreement.mae, count: detail.subjects.length }
-        : { name: test.name, mae: test.mae, count: test.faceCount },
-    )
+function fullestTests(tests: LabTestSummary[]): LabTestSummary[] {
+  const ordered = [...tests].sort((a, b) => b.faceCount - a.faceCount || b.createdAt.localeCompare(a.createdAt))
+  const best = new Map<string, LabTestSummary>()
+  for (const test of ordered) {
+    const identity = runIdentity(test.name)
+    const key = `${identity.dataset} ${identity.method}`
+    if (!best.has(key)) best.set(key, test)
   }
-  if (!list.some((item) => item.name === detail.test.name)) {
-    list.unshift({
-      name: detail.test.name,
-      mae: detail.agreement.mae,
-      count: detail.subjects.length,
-    })
+  return [...best.values()]
+}
+
+function detailRun(detail: LabTestDetail): MethodRun {
+  const identity = runIdentity(detail.test.name)
+  return {
+    dataset: identity.dataset,
+    method: identity.method,
+    rows: researchRows(detail),
+    mae: detail.agreement.mae,
+    count: detail.subjects.length,
   }
-  return list
+}
+
+function trainedMisses(runs: TrainRunSummary[]): TrainedMiss[] {
+  const misses: TrainedMiss[] = []
+  const seen = new Set<string>()
+  for (const run of runs) {
+    const trainedOn = runIdentity(run.name).dataset
+    if (run.heldMae != null && run.heldCount > 0) {
+      const key = `held ${trainedOn}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        misses.push({
+          trainedOn,
+          testedOn: trainedOn,
+          mae: run.heldMae,
+          count: run.heldCount,
+          kind: 'held out',
+        })
+      }
+    }
+    if (run.crossMae != null && run.crossCount > 0 && run.crossName) {
+      const key = `cross ${trainedOn} ${run.crossName}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        misses.push({
+          trainedOn,
+          testedOn: run.crossName,
+          mae: run.crossMae,
+          count: run.crossCount,
+          kind: 'other camera',
+        })
+      }
+    }
+  }
+  return misses
 }
 
 export function ResultsPage() {
@@ -61,6 +100,8 @@ export function ResultsPage() {
   const [tests, setTests] = useState<LabTestSummary[]>([])
   const [listReady, setListReady] = useState(false)
   const [detail, setDetail] = useState<LabTestDetail | null>(null)
+  const [runs, setRuns] = useState<MethodRun[]>([])
+  const [trained, setTrained] = useState<TrainedMiss[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -74,6 +115,43 @@ export function ResultsPage() {
       })
       .finally(() => {
         if (!cancel) setListReady(true)
+      })
+    return () => {
+      cancel = true
+    }
+  }, [])
+
+  const fullestKey = fullestTests(tests)
+    .map((test) => test.id)
+    .join(',')
+
+  useEffect(() => {
+    const ids = fullestKey ? fullestKey.split(',') : []
+    if (ids.length === 0) {
+      setRuns([])
+      return
+    }
+    let cancel = false
+    Promise.all(ids.map((id) => fetchLabTest(id, { brief: true })))
+      .then((details) => {
+        if (!cancel) setRuns(details.map(detailRun))
+      })
+      .catch(() => {
+        if (!cancel) setError('Could not load the full runs behind the research answers.')
+      })
+    return () => {
+      cancel = true
+    }
+  }, [fullestKey])
+
+  useEffect(() => {
+    let cancel = false
+    fetchTrainRuns()
+      .then((rows) => {
+        if (!cancel) setTrained(trainedMisses(rows))
+      })
+      .catch(() => {
+        if (!cancel) setTrained([])
       })
     return () => {
       cancel = true
@@ -151,12 +229,12 @@ export function ResultsPage() {
         ) : null}
         <section className="result-questions" aria-label="Research questions">
           <h2>Research questions</h2>
-          {detail ? (
+          {runs.length > 0 ? (
             <>
               <p className="lab-status">
-                RQ1 to RQ3 use {detail.test.name}. RQ4 compares every saved test.
+                RQ1 to RQ3 use the fullest saved run of each method. The cards below are the test you opened.
               </p>
-              <ResearchQuestions rows={researchRows(detail)} datasets={researchSets(tests, detail)} />
+              <ResearchQuestions runs={runs} trained={trained} />
             </>
           ) : !listReady || selected ? (
             <p className="rq-wait">Opening the research answers…</p>

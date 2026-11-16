@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { LabTabs } from '../components/LabTabs'
 import { SiteNav } from '../components/SiteNav'
+import { TrainHistory } from '../components/TrainHistory'
 
 type TrainStatus = {
   state: 'idle' | 'running' | 'done' | 'error' | 'stopped'
@@ -9,6 +11,7 @@ type TrainStatus = {
   path: string
   epochs: number
   subjects: number
+  savedId: string | null
 }
 
 type Summary = {
@@ -22,10 +25,10 @@ type Summary = {
 
 const PASSES = [1, 2, 5, 30] as const
 const PEOPLE = [
-  { label: '1 person', value: 1 },
-  { label: '2 people', value: 2 },
-  { label: '5 people', value: 5 },
-  { label: 'Every person', value: 0 },
+  { label: '1', value: 1 },
+  { label: '2', value: 2 },
+  { label: '5', value: 5 },
+  { label: 'All', value: 0 },
 ] as const
 
 const EMPTY: TrainStatus = {
@@ -35,6 +38,7 @@ const EMPTY: TrainStatus = {
   path: '',
   epochs: 0,
   subjects: 0,
+  savedId: null,
 }
 
 function lineClass(line: string): string {
@@ -49,12 +53,15 @@ function lineClass(line: string): string {
 export function TrainPage() {
   const [status, setStatus] = useState<TrainStatus>(EMPTY)
   const [path, setPath] = useState('')
+  const [crossPath, setCrossPath] = useState('')
   const [summary, setSummary] = useState<Summary | null>(null)
   const [note, setNote] = useState('')
   const [epochs, setEpochs] = useState<number>(2)
   const [subjects, setSubjects] = useState<number>(2)
   const [choosing, setChoosing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [historyKey, setHistoryKey] = useState(0)
+  const logRef = useRef<HTMLOListElement>(null)
 
   useEffect(() => {
     let stop = false
@@ -65,7 +72,7 @@ export function TrainPage() {
         const body = (await res.json()) as TrainStatus
         if (!stop) setStatus(body)
       } catch {
-        /* the dev server will answer on the next tick */
+        /* the dev server answers on the next tick */
       }
     }
     void tick()
@@ -75,6 +82,37 @@ export function TrainPage() {
       window.clearInterval(id)
     }
   }, [])
+
+  useEffect(() => {
+    if (status.savedId) setHistoryKey((value) => value + 1)
+  }, [status.savedId])
+
+  useEffect(() => {
+    const node = logRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [status.log])
+
+  async function chooseCross() {
+    setChoosing(true)
+    setNote('')
+    try {
+      const res = await fetch('/api/local-lab/choose-folder', { method: 'POST' })
+      const body = (await res.json()) as { ok?: boolean; path?: string; reason?: string }
+      if (!body.ok || !body.path) {
+        setNote(body.reason === 'cancelled' ? 'Folder window closed.' : 'The folder window did not open.')
+        return
+      }
+      if (body.path === path) {
+        setNote('Pick a different folder from the one being trained.')
+        return
+      }
+      setCrossPath(body.path)
+    } catch {
+      setNote('Could not open the folder window.')
+    } finally {
+      setChoosing(false)
+    }
+  }
 
   async function chooseFolder() {
     setChoosing(true)
@@ -100,7 +138,7 @@ export function TrainPage() {
       }
       setSummary(looked.summary)
       if (looked.summary.clips === 0) {
-        setNote('No video or image folder in there has a pulse curve. A heart-rate number alone is not enough.')
+        setNote('No clip in that folder has a pulse curve.')
       }
     } catch {
       setNote('Could not open the folder window.')
@@ -116,7 +154,7 @@ export function TrainPage() {
       const res = await fetch('/api/local-lab/train', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, epochs, subjects }),
+        body: JSON.stringify({ path, epochs, subjects, crossPath: crossPath || undefined }),
       })
       const body = (await res.json()) as TrainStatus & { ok?: boolean; error?: string }
       if (body.error) setNote(body.error)
@@ -134,6 +172,10 @@ export function TrainPage() {
 
   const running = status.state === 'running'
   const folderLabel = path ? path.split('/').filter(Boolean).slice(-1)[0] : ''
+  const crossLabel = crossPath ? crossPath.split('/').filter(Boolean).slice(-1)[0] : ''
+  const shownLog = (status.log.length > 0 ? status.log : ['Waiting for a dataset.']).filter(
+    (line) => !line.startsWith('record '),
+  ).slice(-8)
 
   return (
     <>
@@ -141,124 +183,122 @@ export function TrainPage() {
       <main className="lab-page">
         <header className="lab-intro">
           <LabTabs />
-          <h1>Train PhysNet on your folders</h1>
-          <p className="lab-status">
-            PhysNet learns the pulse curve from the face video and the contact recording in the file.
-            CHROM and POS stay on Local lab. They do not need this step.
-          </p>
+          <h1>Train PhysNet</h1>
+          <p className="lab-status">A folder on this Mac. The numbers are saved. The videos stay here.</p>
         </header>
-        <div className="lab-sheet">
-            <section className="lab-block" aria-labelledby="train-title">
-              <h2 id="train-title">Dataset</h2>
-              <div className="train-actions">
-                <button type="button" className="cta cta-secondary" disabled={choosing || running} onClick={() => void chooseFolder()}>
-                  {choosing ? 'Opening…' : 'Choose dataset'}
+
+        <section className="train-composer" aria-labelledby="train-title">
+          <div className="train-head">
+            <h2 id="train-title">Dataset</h2>
+            <p>UBFC or PURE, already unzipped.</p>
+          </div>
+          <div className="train-pick">
+            <div className="train-field">
+              <strong>{folderLabel || 'No folder yet'}</strong>
+              <span>
+                {summary
+                  ? `${summary.clips} clip${summary.clips === 1 ? '' : 's'}${
+                      summary.subjects.length > 0
+                        ? ` · ${summary.subjects.slice(0, 4).join(', ')}${summary.subjects.length > 4 ? '…' : ''}`
+                        : ''
+                    }`
+                  : 'The pulse curve has to be in the folder, not only a heart-rate number.'}
+              </span>
+            </div>
+            <button type="button" className="cta cta-secondary" disabled={choosing || running} onClick={() => void chooseFolder()}>
+              {choosing ? 'Opening…' : folderLabel ? 'Change' : 'Choose folder'}
+            </button>
+          </div>
+          {note ? <p className="train-alert">{note}</p> : null}
+
+          <div className="train-controls">
+            <fieldset className="method-pick">
+              <legend>Passes</legend>
+              {PASSES.map((value) => (
+                <button key={value} type="button" aria-pressed={epochs === value} disabled={running} onClick={() => setEpochs(value)}>
+                  {value}
                 </button>
+              ))}
+            </fieldset>
+            <fieldset className="method-pick">
+              <legend>People</legend>
+              {PEOPLE.map((item) => (
                 <button
+                  key={item.label}
                   type="button"
-                  className="cta cta-primary"
-                  disabled={!path || choosing || running || busy || summary?.clips === 0}
-                  onClick={() => void start()}
+                  aria-pressed={subjects === item.value}
+                  disabled={running}
+                  onClick={() => setSubjects(item.value)}
                 >
-                  {running ? 'Training…' : 'Train'}
+                  {item.label}
                 </button>
-                {running ? (
-                  <button type="button" className="cta cta-secondary" onClick={() => void stop()}>
-                    Stop
-                  </button>
-                ) : null}
-              </div>
-              {folderLabel ? <p className="train-path">{folderLabel}</p> : null}
-              {summary ? (
-                <p className="lab-status">
-                  {summary.clips} clip{summary.clips === 1 ? '' : 's'} with a pulse curve
-                  {summary.subjects.length > 0 ? ` · ${summary.subjects.slice(0, 8).join(', ')}` : ''}
-                  {summary.subjects.length > 8 ? '…' : ''}.
-                  {subjects === 0
-                    ? ' The last people stay out of training so the score is honest.'
-                    : subjects === 1
-                      ? ' One person is learned. Nobody is held out.'
-                      : ' The next person after this slice is held out.'}
-                </p>
-              ) : (
-                <p className="lab-status">Choose the unzipped UBFC or PURE folder, then press Train.</p>
-              )}
-              {summary?.notes?.length ? <p className="lab-status">{summary.notes[0]}</p> : null}
-              {note ? <p className="lab-status">{note}</p> : null}
+              ))}
+            </fieldset>
+          </div>
+          <div className="train-pick">
+            <div className="train-field">
+              <strong>{crossLabel || 'No second folder'}</strong>
+              <span>Optional. Train here, then score every person in that other folder.</span>
+            </div>
+            <button
+              type="button"
+              className="cta cta-secondary"
+              disabled={choosing || running}
+              onClick={() => void chooseCross()}
+            >
+              {crossLabel ? 'Change test' : 'Test on another folder'}
+            </button>
+          </div>
+          <p className="train-hint">
+            First 30 seconds of each clip.{' '}
+            {subjects === 0
+              ? 'About one in five people are held out, and that miss is saved in BPM.'
+              : 'The next person after this slice is held out, and that miss is saved in BPM.'}
+          </p>
 
-              <fieldset className="method-pick train-choices">
-                <legend>Passes</legend>
-                {PASSES.map((value) => (
-                  <button key={value} type="button" aria-pressed={epochs === value} disabled={running} onClick={() => setEpochs(value)}>
-                    {value}
-                  </button>
-                ))}
-              </fieldset>
-              <fieldset className="method-pick train-choices">
-                <legend>People</legend>
-                {PEOPLE.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    aria-pressed={subjects === item.value}
-                    disabled={running}
-                    onClick={() => setSubjects(item.value)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </fieldset>
-              <p className="method-pick-note">
-                Each clip uses its first 30 seconds, resized from the whole frame. The learned file is
-                research/out/physnet_local.pt on this Mac. Leaving this page does not stop the run.
-              </p>
+          <div className="train-footer">
+            <button
+              type="button"
+              className="cta cta-primary train-go"
+              disabled={!path || choosing || running || busy || summary?.clips === 0}
+              onClick={() => void start()}
+            >
+              {running ? 'Training…' : 'Train PhysNet'}
+            </button>
+            <p>
+              {epochs} pass{epochs === 1 ? '' : 'es'}
+              {' · '}
+              {subjects === 0 ? 'every person' : `${subjects} ${subjects === 1 ? 'person' : 'people'}`}
+            </p>
+            {running ? (
+              <button type="button" className="cta cta-secondary" onClick={() => void stop()}>
+                Stop
+              </button>
+            ) : null}
+            {status.savedId ? <Link to={`/train-results/${status.savedId}`}>Open this run</Link> : null}
+          </div>
+          {status.log.length > 0 ? (
+            <ol className="train-log" ref={logRef} aria-live="polite" aria-label="Training">
+              {shownLog.map((line, index) => (
+                <li key={`${index}-${line}`} className={lineClass(line)}>
+                  {line}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </section>
 
-              <article className="lab-term" aria-live="polite" aria-label="Training">
-                <header className="lab-term-chrome">
-                  <span className="lab-term-lights" aria-hidden>
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                  <span className="lab-term-title">motionpulse — train</span>
-                  <span className="lab-term-count">{running ? 'training' : status.state}</span>
-                </header>
-                <ol>
-                  {(status.log.length > 0 ? status.log : ['idle  choose a folder, then press Train']).map((line, index) => (
-                    <li key={`${index}-${line}`} className={lineClass(line)}>
-                      {line}
-                    </li>
-                  ))}
-                </ol>
-              </article>
-            </section>
+        <section className="train-history" aria-labelledby="history-title">
+          <div className="train-history-head">
+            <h2 id="history-title">Saved runs</h2>
+            <Link to="/train-results">Full history</Link>
+          </div>
+          <TrainHistory key={historyKey} detail={false} />
+        </section>
 
-            <section className="lab-block" aria-labelledby="model-title">
-              <h2 id="model-title">Which model can run a dataset</h2>
-              <ul className="train-models">
-                <li>
-                  <strong>CHROM and POS</strong>
-                  <span>Local lab, press Run. Color formulas. No training. These are the two methods that score a video today.</span>
-                </li>
-                <li>
-                  <strong>PhysNet</strong>
-                  <span>This page, press Train. A 3D network that learns the pulse curve. It does not replace the Run button until a later step.</span>
-                </li>
-                <li>
-                  <strong>DeeprPPG</strong>
-                  <span>Liu and Yuen, 2020. A different deep network. It is not in this build, so it cannot run your dataset the way CHROM and POS do.</span>
-                </li>
-                <li>
-                  <strong>ETA-rPPGNet</strong>
-                  <span>Hu et al., 2021. A time-attention network. No code and no weights here, so there is no Run button for it.</span>
-                </li>
-                <li>
-                  <strong>AND-rPPG</strong>
-                  <span>Lokendra and Puneet, 2022. A denoising network. It is not a color formula, and it is not wired up.</span>
-                </li>
-              </ul>
-            </section>
-        </div>
+        <p className="train-aside">
+          CHROM and POS stay on Local lab. DeeprPPG, ETA-rPPGNet, and AND-rPPG are not in this build.
+        </p>
       </main>
     </>
   )

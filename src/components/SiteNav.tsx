@@ -106,6 +106,7 @@ export function SiteNav({ primaryCta }: Props) {
                   <li key={tab.to}>
                     <NavLink
                       to={tab.to}
+                      end={tab.to === '/train'}
                       className={({ isActive }) => (isActive ? 'is-on' : undefined)}
                       onClick={close}
                     >

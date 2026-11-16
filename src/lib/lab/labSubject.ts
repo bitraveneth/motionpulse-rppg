@@ -8,6 +8,7 @@ export type LabSubjectInput = {
   bpm: number
   plainBpm: number | null
   weightedBpm: number | null
+  cleanedBpm: number | null
   referenceBpm: number | null
   snr: number | null
   durationSec: number
@@ -81,6 +82,8 @@ export function parseLabSubject(value: unknown): LabSubjectInput | null {
   if (body.plainBpm != null && (plainBpm == null || plainBpm <= 0)) return null
   const weightedBpm = optional(body.weightedBpm, 0, 400)
   if (body.weightedBpm != null && (weightedBpm == null || weightedBpm <= 0)) return null
+  const cleanedBpm = optional(body.cleanedBpm, 0, 400)
+  if (body.cleanedBpm != null && (cleanedBpm == null || cleanedBpm <= 0)) return null
   const snr = optional(body.snr, 0, 1e12)
   if (body.snr != null && snr == null) return null
   const respiratoryRate = optional(body.respiratoryRate, 2, 80)
@@ -92,6 +95,7 @@ export function parseLabSubject(value: unknown): LabSubjectInput | null {
     bpm,
     plainBpm,
     weightedBpm,
+    cleanedBpm,
     referenceBpm,
     snr,
     durationSec,
