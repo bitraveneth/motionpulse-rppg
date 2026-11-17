@@ -185,8 +185,9 @@ export function ResultsPage() {
           <h1>Saved dataset runs</h1>
           <p className="lab-status">
             These rows are already in the database. Each card is one subject, and the same card is
-            on the feed. <Link to="/feed">Open the feed</Link>. The time is Asia/Shanghai. The
-            videos stay on the machine that ran them.
+            on the feed. The length on a card is the full video, about one minute. Eight seconds is
+            one analysis window inside that video, not a shorter clip. <Link to="/feed">Open the feed</Link>.
+            The time is Asia/Shanghai. The videos stay on the machine that ran them.
           </p>
         </header>
         {!listReady ? (

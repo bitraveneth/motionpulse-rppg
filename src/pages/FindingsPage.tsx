@@ -103,6 +103,20 @@ function rq1Rows(lines: string[]): { name: string; r: string; videos: string }[]
   })
 }
 
+type ClipLength = { dataset: string; seconds: number; windows: number; videos: number }
+
+function clipLengths(details: LabTestDetail[]): ClipLength[] {
+  const grouped = new Map<string, ClipLength>()
+  for (const detail of details) {
+    const dataset = runIdentity(detail.test.name).dataset
+    if (grouped.has(dataset) || detail.subjects.length === 0) continue
+    const seconds = detail.subjects.reduce((sum, row) => sum + row.durationSec, 0) / detail.subjects.length
+    const windows = detail.subjects.reduce((sum, row) => sum + row.windows, 0) / detail.subjects.length
+    grouped.set(dataset, { dataset, seconds, windows, videos: detail.subjects.length })
+  }
+  return [...grouped.values()].sort((a, b) => a.dataset.localeCompare(b.dataset))
+}
+
 function ratesMatch(report: ResearchReport): boolean {
   return (
     report.rq3.pairs.length > 0 &&
@@ -112,6 +126,7 @@ function ratesMatch(report: ResearchReport): boolean {
 
 export function FindingsPage() {
   const [runs, setRuns] = useState<MethodRun[]>([])
+  const [lengths, setLengths] = useState<ClipLength[]>([])
   const [trained, setTrained] = useState<TrainedMiss[]>([])
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +136,10 @@ export function FindingsPage() {
     fetchLabTests()
       .then((tests) => Promise.all(fullestTests(tests).map((test) => fetchLabTest(test.id, { brief: true }))))
       .then((details) => {
-        if (!cancel) setRuns(details.map(detailRun))
+        if (!cancel) {
+          setRuns(details.map(detailRun))
+          setLengths(clipLengths(details))
+        }
       })
       .catch(() => {
         if (!cancel) setError('Could not load the saved runs.')
@@ -187,12 +205,25 @@ export function FindingsPage() {
         <section className="result-summary findings-copy" aria-labelledby="findings-method">
           <h2 id="findings-method">How the heart rate was measured</h2>
           <p>
-            Each video is read at 15 frames per second. The face is split into the forehead, the left cheek,
-            the right cheek, and the lower face. CHROM and POS each turn that color into a pulse. The pulse is
-            read in windows of 8 seconds, stepping forward by 1 second, and only frequencies from 0.7 Hz to
-            4.0 Hz are kept. The heart rate of a window is the strongest frequency in that band, times 60.
-            The rate saved for a video is the average of those windows.
+            Each video is read at 15 frames per second, from the first frame to the last. The face is split
+            into the forehead, the left cheek, the right cheek, and the lower face. CHROM and POS each turn
+            that color into a pulse. Inside the video, the pulse is read in windows of 8 seconds, and the
+            window steps forward by 1 second until the video ends. Only frequencies from 0.7 Hz to 4.0 Hz
+            are kept. The heart rate of one window is the strongest frequency in that band, times 60. The
+            rate saved for a video is the average of those windows.
           </p>
+          {lengths.length > 0 ? (
+            <p>
+              Eight seconds is the length of one window, not the length of the clip.{' '}
+              {lengths
+                .map(
+                  (row) =>
+                    `${row.dataset} averages ${row.seconds.toFixed(0)} seconds, about ${row.windows.toFixed(0)} windows, across ${row.videos} videos`,
+                )
+                .join('. ')}
+              .
+            </p>
+          ) : null}
           <p>
             The equal mix gives the four regions the same weight. Trust weighting gives more weight to a
             region whose spectrum looks like a pulse and whose motion is small. The conflict score says how
