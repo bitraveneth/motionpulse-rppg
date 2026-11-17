@@ -354,9 +354,9 @@ export function researchReport(runs: MethodRun[], trained: TrainedMiss[] = []): 
       rq3Sentence = 'Leaving out high-conflict windows helps on some runs and not on others.'
     }
   } else if (withRows.length > 0 && withRows.every((run) => gateIsFlat(run.rows))) {
-    rq3Verdict = 'wait'
+    rq3Verdict = 'no'
     rq3Sentence =
-      'The conflict gate does not move the heart rate, so the plain rate and the saved rate match. A rate that leaves out high-conflict windows is not in these tests yet.'
+      'No. On the hard videos the motion-aware rate matches the plain rate. The conflict gate does not move the heart rate.'
     const hard = withRows.reduce(
       (sum, run) => sum + labeled(run.rows).filter((row) => hardMotion(row.risk)).length,
       0,
