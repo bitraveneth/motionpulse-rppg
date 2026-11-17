@@ -233,6 +233,7 @@ export function ResultsPage() {
             <>
               <p className="lab-status">
                 RQ1 to RQ3 use the fullest saved run of each method. The cards below are the test you opened.
+                The written version is on <Link to="/findings">Findings</Link>.
               </p>
               <ResearchQuestions runs={runs} trained={trained} />
             </>

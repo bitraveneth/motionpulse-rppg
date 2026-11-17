@@ -2490,6 +2490,32 @@
   font-variant-numeric: tabular-nums;
 }
 
+.findings-copy h2 {
+  margin: 0;
+}
+
+.findings-copy p {
+  max-width: 46rem;
+  margin: 0.75rem 0 0;
+}
+
+.findings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.findings-head h2 {
+  margin: 0;
+}
+
+.findings-head .rq-answer {
+  flex: none;
+  margin-top: 0.2rem;
+}
+
 .result-questions {
   margin-top: 1.25rem;
 }

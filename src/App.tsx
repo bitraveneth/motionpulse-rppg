@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { PersistentLab } from './components/PersistentLab'
 import { AccountPage } from './pages/AccountPage'
 import { FeedPage } from './pages/FeedPage'
+import { FindingsPage } from './pages/FindingsPage'
 import { HomePage } from './pages/HomePage'
 import { LocalLabPage } from './pages/LocalLabPage'
 import { ResultsPage } from './pages/ResultsPage'
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/train" element={<TrainPage />} />
           <Route path="/train-results" element={<TrainResultsPage />} />
           <Route path="/train-results/:runId" element={<TrainResultsPage />} />
+          <Route path="/findings" element={<FindingsPage />} />
           <Route path="/results" element={<ResultsPage />} />
           <Route path="/results/:testId" element={<ResultsPage />} />
           <Route path="/scan" element={<ScanPage />} />
