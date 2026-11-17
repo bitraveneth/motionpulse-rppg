@@ -2499,6 +2499,30 @@
   margin: 0.75rem 0 0;
 }
 
+.findings-copy .findings-eq {
+  display: grid;
+  gap: 0.15rem;
+  max-width: none;
+  margin: 0.7rem 0 0;
+  padding: 0.7rem 0.85rem;
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  background: #f6faf8;
+  color: var(--site-ink);
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  line-height: 1.45;
+}
+
+.findings-eq-label {
+  color: var(--site-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .findings-head {
   display: flex;
   flex-wrap: wrap;

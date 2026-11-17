@@ -117,6 +117,17 @@ function clipLengths(details: LabTestDetail[]): ClipLength[] {
   return [...grouped.values()].sort((a, b) => a.dataset.localeCompare(b.dataset))
 }
 
+function Formula({ label, lines }: { label: string; lines: string[] }) {
+  return (
+    <p className="findings-eq">
+      <span className="findings-eq-label">{label}</span>
+      {lines.map((line) => (
+        <span key={line}>{line}</span>
+      ))}
+    </p>
+  )
+}
+
 function ratesMatch(report: ResearchReport): boolean {
   return (
     report.rq3.pairs.length > 0 &&
@@ -241,6 +252,69 @@ export function FindingsPage() {
             ground-truth file or the PURE pulse file. The public PURE release has 60 videos. This page
             reports the videos that were saved.
           </p>
+        </section>
+
+        <section className="result-summary findings-copy" aria-labelledby="findings-math">
+          <h2 id="findings-math">Mathematics</h2>
+          <p>These are the expressions behind the tables. The camera rate is ŷ and the file rate is y.</p>
+          <Formula
+            label="Heart rate of one window"
+            lines={['BPM = 60 · f*', 'f* is the strongest frequency between 0.7 Hz and 4.0 Hz']}
+          />
+          <Formula label="Rate saved for a video" lines={['ŷ = mean of the window rates']} />
+          <Formula
+            label="Equal mix of the four regions"
+            lines={['R̄(t) = (Rforehead + Rleft + Rright + Rlower) / 4', 'Green and blue use the same average.']}
+          />
+          <Formula
+            label="CHROM"
+            lines={[
+              'X = 3R′ − 2G′',
+              'Y = 1.5R′ + G′ − 1.5B′',
+              'α = σ(X) / σ(Y)',
+              'S(t) = X − αY',
+            ]}
+          />
+          <Formula
+            label="POS"
+            lines={[
+              'Cr = R′ − 1,  Cg = G′ − 1,  Cb = B′ − 1',
+              'S1 = Cg − Cb',
+              'S2 = −2Cr + Cg + Cb',
+              'α = σ(S1) / σ(S2)',
+              'S(t) = S1 + α S2',
+            ]}
+          />
+          <Formula
+            label="Conflict and the gate"
+            lines={[
+              'C = 0.5 Ctemp + 0.5 Cspec',
+              'gain = (1 − C) · (1 − 0.15) + 0.15',
+              'Sgated(t) = gain · S(t)',
+            ]}
+          />
+          <p>
+            Ctemp is the strongest correlation between face motion and the pulse, allowing a lead or lag of
+            half a second. Cspec is how much their spectra overlap inside the pulse band. A hard video has
+            C ≥ 0.5. The gain is one positive number for the whole window, so it changes the height of S and
+            leaves f* where it is.
+          </p>
+          <Formula
+            label="Trust weight of a region"
+            lines={[
+              'Ri = 1 / (1 + exp(−4 (Qi − Mi)))',
+              'wi = Ri / (Rforehead + Rleft + Rright + Rlower)',
+            ]}
+          />
+          <p>Qi is how pulse-like that region’s spectrum is. Mi is its motion compared with the busiest region.</p>
+          <Formula
+            label="Miss, RMSE, and correlation"
+            lines={[
+              'MAE = (1 / n) Σ |ŷᵢ − yᵢ|',
+              'RMSE = √( (1 / n) Σ (ŷᵢ − yᵢ)² )',
+              'r = Σ (ŷᵢ − mean ŷ)(yᵢ − mean y) / √( Σ (ŷᵢ − mean ŷ)² · Σ (yᵢ − mean y)² )',
+            ]}
+          />
         </section>
 
         {!ready ? (
