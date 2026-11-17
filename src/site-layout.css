@@ -2514,6 +2514,84 @@
   line-height: 1.45;
 }
 
+.findings-run {
+  margin-top: 1.15rem;
+}
+
+.findings-run h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 560;
+}
+
+.findings-plots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.55rem;
+}
+
+.findings-plots figure {
+  margin: 0;
+}
+
+.findings-plots figcaption {
+  margin: 0 0 0.35rem;
+  color: var(--site-ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.findings-plots svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #f6faf8;
+  border-radius: 0.75rem;
+}
+
+.findings-plots text {
+  fill: #5c6b76;
+  font-size: 11px;
+  font-family: var(--font-sans), sans-serif;
+}
+
+.findings-plots .findings-axis-name {
+  fill: #3d524c;
+}
+
+.findings-grid {
+  stroke: #d5e4df;
+  stroke-width: 1;
+}
+
+.findings-axis {
+  stroke: #8aa39b;
+  stroke-width: 1.2;
+}
+
+.findings-identity {
+  stroke: #0f5f55;
+  stroke-width: 1.6;
+  fill: none;
+}
+
+.findings-limit {
+  stroke: #8aa39b;
+  stroke-width: 1.2;
+  stroke-dasharray: 4 3;
+}
+
+.findings-dot {
+  fill: #1a7f72;
+  fill-opacity: 0.8;
+}
+
+.findings-bar {
+  fill: #8fd4c8;
+}
+
 .findings-eq-label {
   color: var(--site-ink-soft);
   font-family: var(--font-sans);
@@ -3233,7 +3311,8 @@
   .lab-fields-folder,
   .lab-command,
   .lab-metric-grid,
-  .lab-q-grid {
+  .lab-q-grid,
+  .findings-plots {
     grid-template-columns: 1fr;
   }
 }

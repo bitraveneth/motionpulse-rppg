@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AgreementPlots } from '../components/AgreementPlots'
 import { LabTabs } from '../components/LabTabs'
 import { SiteNav } from '../components/SiteNav'
 import {
@@ -354,6 +355,18 @@ export function FindingsPage() {
                   ))}
                 </tbody>
               </table>
+            </section>
+
+            <section className="result-summary findings-copy" aria-labelledby="findings-plots">
+              <h2 id="findings-plots">Agreement plots</h2>
+              <p>
+                Each run has the three plots used to judge a heart-rate estimate. The diagonal is where the
+                camera rate equals the file rate. Bland–Altman draws the mean difference and the band
+                mean ± 1.96 standard deviations. The bars count videos by the size of the miss.
+              </p>
+              {agreement.map((row) => (
+                <AgreementPlots key={row.name} name={row.name} summary={row.summary} />
+              ))}
             </section>
 
             <section className="result-summary findings-copy" aria-labelledby="findings-rq1">
