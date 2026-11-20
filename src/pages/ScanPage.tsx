@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnalysisProgress, type AnalysisStage } from '../components/AnalysisProgress'
 import { ControlsPanel, type InputMode } from '../components/ControlsPanel'
 import { FaceOverlay } from '../components/FaceOverlay'
+import { MethodChooser } from '../components/MethodChooser'
 import { MetricPill } from '../components/MetricPill'
 import { MonitorStage } from '../components/MonitorStage'
 import { SessionBrowser } from '../components/SessionBrowser'
@@ -38,6 +39,7 @@ import {
   DEFAULT_CONTROLS,
   ROI_IDS,
   ROI_LABELS,
+  type CandidateMethod,
   type DemoControls,
   type FrameLandmarks,
   type RoiRgbTrace,
@@ -117,6 +119,8 @@ export function ScanPage() {
   const [capturing, setCapturing] = useState(false)
   /** Session clip id that should offer a second 10 second take. */
   const [anotherForId, setAnotherForId] = useState<string | null>(null)
+  /** CHROM / POS picker before webcam starts. */
+  const [methodChooserOpen, setMethodChooserOpen] = useState(false)
   /** Shown only after the open camera sees a cap over the forehead. */
   const [hatPrompt, setHatPrompt] = useState(false)
   const [hatReason, setHatReason] = useState<HatBlockReason | null>(null)
@@ -585,7 +589,7 @@ export function ScanPage() {
     setError(null)
     showHatPrompt(false)
     hatSkipRef.current = false
-    void handleInputMode('webcam')
+    setMethodChooserOpen(true)
   }
 
   function recheckHat() {
@@ -599,15 +603,43 @@ export function ScanPage() {
     showHatPrompt(false)
   }
 
-  async function handleInputMode(mode: InputMode) {
+  async function startWebcamWithMethod(method: CandidateMethod) {
+    if (capturing || busy) return
+    setMethodChooserOpen(false)
+    const nextControls = { ...controlsRef.current, candidateMethod: method }
+    controlsRef.current = nextControls
+    setControls(nextControls)
     showHatPrompt(false)
+    hatSkipRef.current = false
     setError(null)
-    setInputMode(mode)
     setStage('idle')
     setStageDetail(undefined)
     setThumbnailData(null)
     thumbCapturedRef.current = false
     setScrub(1)
+    revokeObjectUrl()
+    setUploadName(null)
+    setShowStory(false)
+    inputModeRef.current = 'webcam'
+    setInputMode('webcam')
+    setStatus(`Using ${method} — opening camera…`)
+    await startWebcam()
+  }
+
+  async function handleInputMode(mode: InputMode) {
+    showHatPrompt(false)
+    setError(null)
+    setStage('idle')
+    setStageDetail(undefined)
+    setThumbnailData(null)
+    thumbCapturedRef.current = false
+    setScrub(1)
+    if (mode === 'webcam') {
+      if (capturing || busy) return
+      setMethodChooserOpen(true)
+      return
+    }
+    setInputMode(mode)
     if (mode === 'synthetic') {
       stopWebcam()
       revokeObjectUrl()
@@ -627,19 +659,12 @@ export function ScanPage() {
       )
       return
     }
-    if (mode === 'webcam') {
-      revokeObjectUrl()
-      setUploadName(null)
-      setShowStory(false)
-      await startWebcam()
-    } else {
-      stopWebcam()
-      setLive(null)
-      setUploadName(null)
-      setShowStory(false)
-      setHasVideo(false)
-      setStatus('Choose one or more short face videos (up to 10 in a session).')
-    }
+    stopWebcam()
+    setLive(null)
+    setUploadName(null)
+    setShowStory(false)
+    setHasVideo(false)
+    setStatus('Choose one or more short face videos (up to 10 in a session).')
   }
 
   function openUploadPicker() {
@@ -1521,6 +1546,13 @@ export function ScanPage() {
   return (
     <>
       <SiteNav primaryCta={{ label: c('cta.scan'), to: '/scan' }} />
+
+      <MethodChooser
+        open={methodChooserOpen}
+        selected={controls.candidateMethod}
+        onSelect={(method) => void startWebcamWithMethod(method)}
+        onCancel={() => setMethodChooserOpen(false)}
+      />
 
       <main className="scan-page" id="monitor">
         <header className="scan-page-head">

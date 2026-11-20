@@ -1921,6 +1921,54 @@
     margin-top: 0.9rem;
   }
 
+  .method-chooser-card {
+    width: min(24rem, 100%);
+  }
+
+  .method-chooser-options {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .method-chooser-option {
+    display: grid;
+    gap: 0.2rem;
+    width: 100%;
+    padding: 0.85rem 0.95rem;
+    text-align: left;
+    border-radius: 0.85rem;
+    border: 1px solid color-mix(in oklab, var(--color-ink) 14%, transparent);
+    background: color-mix(in oklab, var(--color-mint-soft) 28%, white);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .method-chooser-option:hover {
+    border-color: var(--color-sea);
+    transform: translateY(-1px);
+  }
+
+  .method-chooser-option.is-active {
+    border-color: var(--color-sea);
+    background: color-mix(in oklab, var(--color-sea) 12%, white);
+  }
+
+  .method-chooser-option-title {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 560;
+    letter-spacing: -0.02em;
+  }
+
+  .method-chooser-option-blurb {
+    color: var(--color-ink-soft);
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
   .share-row {
     display: flex;
     flex-wrap: wrap;
